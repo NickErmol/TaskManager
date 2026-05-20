@@ -1,0 +1,46 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.userprefs
+*.DotSettings.user
+TestResults/
+publish/
+
+# EF Core migrations (keep Migrations/ folder but ignore snapshot if desired)
+# Remove the line below if you want to track snapshots
+# **/Migrations/
+
+# Node / Angular
+node_modules/
+dist/
+.angular/
+.cache/
+npm-debug.log*
+yarn-error.log*
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+appsettings.Local.json
+appsettings.Development.json
+
+# Docker
+*.override.env
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Rider / VS Code
+.idea/
+.vscode/
+*.iml
+
+# Logs
+logs/
+*.log
