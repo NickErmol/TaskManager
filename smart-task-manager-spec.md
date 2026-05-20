@@ -933,33 +933,63 @@ docker compose --profile full up --build
 | Mailhog UI        | http://localhost:8025          |
 ---
 ## 10. Version control & CI/CD
-### Version control — GitHub
-Use **GitHub** with the **GitHub Flow** branching strategy (simplest model that supports CI):
-- `main` — always deployable; protected branch (require PR + passing CI)
-- `feature/<name>` — one branch per feature/fix, short-lived, merged via PR
+### Branching strategy — Gitflow
+```
+main        ──────────────────────────────────────────►  (production, tagged)
+               ↑  merge + tag v0.1        ↑  merge + tag v1.0
+hotfix/*  ──╮  │                          │
+             ╰──┤                          │
+develop     ────┼──────────────────────────┼──────────►  (integration)
+              ↑ ↑ ↑                      ↑ ↑
+release/*  ───╯ │ │                      ╯ │
+feature/*  ─────╯ ╰──────────────────────╯
+```
+
+| Branch | Branched from | Merges into | Purpose |
+|---|---|---|---|
+| `main` | — | — | Production only; every commit is a tagged release |
+| `develop` | `main` | — | Integration branch; always contains latest delivered work |
+| `feature/<name>` | `develop` | `develop` | One branch per feature/fix; merged via PR |
+| `release/<version>` | `develop` | `main` + `develop` | Release stabilisation; only bugfixes allowed |
+| `hotfix/<name>` | `main` | `main` + `develop` | Urgent production fixes |
+
+**Rules:**
+- `main` and `develop` are **protected** — no direct pushes, require PR + passing CI
+- Feature branches are short-lived and deleted after merge
+- Release branches are tagged on merge to `main` (e.g. `v1.0.0`) following **SemVer**
 - Commit messages follow **Conventional Commits**: `feat:`, `fix:`, `test:`, `chore:`, `docs:`
 
-### Container registry — GHCR
-All Docker images are pushed to **GitHub Container Registry** (`ghcr.io/<org>/<service>:<sha>`).  
-Authentication uses the built-in `GITHUB_TOKEN` — no extra credentials needed.
-
-### CI pipeline — GitHub Actions
-Triggered on every **push to any branch** and every **pull request to `main`**.
-
+### Workflow files
 ```
 .github/
 └── workflows/
-    ├── ci.yml          # lint + test (all branches / PRs)
-    └── cd.yml          # build images + deploy (main only)
+    ├── ci.yml            # lint + test — all feature/release/hotfix branches and PRs
+    ├── cd-staging.yml    # build images + deploy to staging — on push to develop
+    └── cd-production.yml # build images + deploy to production — on push to main
 ```
 
-**`ci.yml` — jobs run in parallel:**
+### Container registry — GHCR
+All Docker images pushed to **GitHub Container Registry** (`ghcr.io/<owner>/smart-task-manager-<service>`).  
+Auth uses the built-in `GITHUB_TOKEN` — no extra credentials needed.  
+Tags: `:latest` (develop → staging), `:<semver>` e.g. `:1.0.0` (main → production).
+
+---
+
+### `ci.yml` — lint + test on feature, release, hotfix branches and PRs
+
 ```yaml
 name: CI
 on:
   push:
+    branches:
+      - 'feature/**'
+      - 'release/**'
+      - 'hotfix/**'
+      - develop
   pull_request:
-    branches: [main]
+    branches:
+      - develop
+      - main
 
 jobs:
   test-dotnet:
@@ -977,7 +1007,6 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      # Testcontainers requires Docker — ubuntu-latest has it pre-installed
       - run: dotnet test ${{ matrix.project }} --configuration Release --logger "github"
 
   test-angular:
@@ -991,19 +1020,21 @@ jobs:
           cache-dependency-path: frontend/task-manager-app/package-lock.json
       - run: cd frontend/task-manager-app && npm ci
       - run: cd frontend/task-manager-app && npm run lint
-      - run: cd frontend/task-manager-app && npm run test:ci       # jest --watchAll=false
+      - run: cd frontend/task-manager-app && npm run test:ci
       - run: cd frontend/task-manager-app && npm run build -- --configuration production
 ```
 
-**`cd.yml` — runs only on push to `main`, after CI passes:**
+---
+
+### `cd-staging.yml` — deploy to staging on push to `develop`
+
 ```yaml
-name: CD
+name: CD Staging
 on:
   push:
-    branches: [main]
+    branches: [develop]
 
 env:
-  REGISTRY: ghcr.io
   IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/smart-task-manager
 
 jobs:
@@ -1032,12 +1063,105 @@ jobs:
           context: ${{ matrix.service.context }}
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}:latest
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}:develop
             ${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy-frontend:
+  deploy-staging-frontend:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/task-manager-app/package-lock.json
+      - run: cd frontend/task-manager-app && npm ci && npm run build -- --configuration staging
+      - uses: vercel/action@v1
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          working-directory: frontend/task-manager-app/dist/task-manager-app
+          # no --prod flag → Vercel staging preview URL
+
+  deploy-staging-backend:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    strategy:
+      matrix:
+        app:
+          - smart-task-manager-gateway-staging
+          - smart-task-manager-identity-staging
+          - smart-task-manager-tasks-staging
+          - smart-task-manager-notifications-staging
+          - smart-task-manager-analytics-staging
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --app ${{ matrix.app }} --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+```
+
+---
+
+### `cd-production.yml` — deploy to production on push to `main` (after release merge)
+
+```yaml
+name: CD Production
+on:
+  push:
+    branches: [main]
+
+env:
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/smart-task-manager
+
+jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: tag
+        run: echo "version=$(git describe --tags --abbrev=0)" >> $GITHUB_OUTPUT
+
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: get-version
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service:
+          - { name: gateway,       context: src/gateway/TaskManager.Gateway }
+          - { name: identity,      context: src/services/identity/TaskManager.Identity }
+          - { name: tasks,         context: src/services/tasks/TaskManager.Tasks }
+          - { name: notifications, context: src/services/notifications/TaskManager.Notifications }
+          - { name: analytics,     context: src/services/analytics/TaskManager.Analytics }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}:latest
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}:${{ needs.get-version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-production-frontend:
     runs-on: ubuntu-latest
     needs: build-and-push
     steps:
@@ -1054,9 +1178,9 @@ jobs:
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           working-directory: frontend/task-manager-app/dist/task-manager-app
-          vercel-args: '--prod'
+          vercel-args: '--prod'        # promotes to production URL
 
-  deploy-backend:
+  deploy-production-backend:
     runs-on: ubuntu-latest
     needs: build-and-push
     strategy:
@@ -1069,35 +1193,64 @@ jobs:
           - smart-task-manager-analytics
     steps:
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --app ${{ matrix.app }} --image ${{ env.IMAGE_PREFIX }}-... --remote-only
+      - run: flyctl deploy --app ${{ matrix.app }} --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 ```
 
-### Deployment targets (all free tiers)
-| Component | Platform | Notes |
-|---|---|---|
-| Angular SPA | **Vercel** | Auto-deploy on every push; preview URL per PR |
-| .NET services | **Fly.io** | 3 free shared-CPU VMs; deploy via `flyctl deploy` |
-| PostgreSQL | **Fly.io Postgres** | Free 1 GB managed Postgres add-on |
-| Redis | **Upstash Redis** | Free 10 000 req/day serverless Redis |
-| RabbitMQ | **CloudAMQP** | Free `lemur` plan: 1M messages/month |
-| Seq (logs) | Local dev only | Use structured JSON logs in prod; no hosted Seq needed |
+---
 
-> **Note:** Running all 5 services on Fly.io's free tier simultaneously is tight. For a demo/portfolio project, deploy only what you need to show. Full production deployment is a stretch goal — `docker compose up` is the primary dev target.
+### Release process (Gitflow)
+```bash
+# 1. Cut a release branch from develop
+git checkout develop && git pull
+git checkout -b release/1.0.0
+
+# 2. Bump version in csproj / package.json, fix any last bugs
+# 3. Open PR: release/1.0.0 → main (CI runs automatically)
+# 4. Merge PR → main, then tag
+git checkout main && git pull
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0         # triggers cd-production.yml
+
+# 5. Back-merge to develop
+git checkout develop
+git merge main
+git push origin develop
+```
+
+Hotfix follows the same pattern but branches from `main` and merges into both `main` and `develop`.
 
 ### PR preview environments
-Vercel automatically creates a preview URL for every PR (`https://smart-task-manager-<hash>.vercel.app`).  
-Add a **status check** in the CI workflow to post the preview URL as a PR comment using the `actions/github-script` action.
+Vercel automatically creates a **preview URL** for every PR to `develop`  
+(`https://smart-task-manager-<hash>.vercel.app`) without the `--prod` flag.
+
+### Deployment targets (all free tiers)
+| Component | Platform | Staging | Production |
+|---|---|---|---|
+| Angular SPA | **Vercel** | Preview URL per PR / develop push | `--prod` flag on main merge |
+| .NET services | **Fly.io** | `-staging` apps | main apps |
+| PostgreSQL | **Fly.io Postgres** | Shared staging DB | Separate prod DB |
+| Redis | **Upstash Redis** | Free 10 000 req/day | Free 10 000 req/day |
+| RabbitMQ | **CloudAMQP** | Free `lemur` plan | Free `lemur` plan |
+| Logs | Local: Seq | Structured JSON stdout | Structured JSON stdout |
+
+> **Note:** Running all 5 services on Fly.io's free tier simultaneously is tight. For a demo/portfolio project, deploy only what you need to show. `docker compose up` remains the primary development target.
 
 ### Required GitHub repository secrets
-| Secret | Value source |
+| Secret | Used by | Value source |
+|---|---|---|
+| `JWT_SECRET` | All services | Random 64-byte hex string |
+| `FLY_API_TOKEN` | cd-staging, cd-production | `flyctl auth token` |
+| `VERCEL_TOKEN` | cd-staging, cd-production | Vercel → Settings → Tokens |
+| `VERCEL_PROJECT_ID` | cd-staging, cd-production | `.vercel/project.json` after `vercel link` |
+| `VERCEL_ORG_ID` | cd-staging, cd-production | `.vercel/project.json` |
+
+### Branch protection rules (GitHub Settings → Branches)
+| Branch | Rules |
 |---|---|
-| `JWT_SECRET` | Random 64-byte hex string |
-| `FLY_API_TOKEN` | `flyctl auth token` |
-| `VERCEL_TOKEN` | Vercel dashboard → Settings → Tokens |
-| `VERCEL_PROJECT_ID` | `.vercel/project.json` after first `vercel link` |
-| `VERCEL_ORG_ID` | `.vercel/project.json` |
+| `main` | Require PR, require CI pass, no direct push, require linear history |
+| `develop` | Require PR, require CI pass, no direct push |
 
 ### Dockerfile conventions
 Each .NET service uses a **multi-stage Dockerfile**:
