@@ -337,6 +337,8 @@ public record Color
 }
 ```
 
+EF Core configuration maps `Color` as an **owned entity** of `Label` so it persists as a single column (`labels.color`) rather than a separate table.
+
 **Domain — entities (rich model, private setters, factory methods):**
 ```csharp
 // Domain/Entities/Board.cs
@@ -589,6 +591,9 @@ record DeadlineApproachingEvent(Guid TaskId, Guid BoardId, string Title, Guid As
 ```
 Routing keys: `task.created`, `task.assigned`, `task.status-changed`, `task.completed`, `task.comment-added`, `task.deadline-approaching`
 `DeadlineApproachingEvent` is published by a background `IHostedService` that queries tasks due in the next 24 hours and runs every hour.
+
+**Reliable publishing — MassTransit EF Core outbox**
+Enable `AddEntityFrameworkOutbox<TasksDbContext>` on the bus configuration. Domain events are written to an outbox table inside the same transaction as the aggregate change; a hosted delivery service drains the outbox to RabbitMQ. This guarantees no events are lost if the process dies between `SaveChangesAsync` and the broker ack. The outbox tables (`InboxState`, `OutboxMessage`, `OutboxState`) are created by EF Core migrations — no extra infrastructure.
 ---
 ### 4.4 Notifications Service — `TaskManager.Notifications`
 **Technology:** .NET 10 · ASP.NET Core · SignalR · MassTransit · Redis · MailKit
@@ -643,6 +648,8 @@ record NotificationPreferences(
 ### 4.5 Analytics Service — `TaskManager.Analytics`
 **Technology:** .NET 10 · ASP.NET Core · EF Core 10 · PostgreSQL · MassTransit
 **Approach:** Pure read side. Subscribes to events and projects them into denormalised read models. No commands, no domain logic.
+
+**Idempotent consumers** — register MassTransit's EF Core inbox on `AnalyticsDbContext`. Duplicate deliveries (from broker retries or outbox redelivery on the publisher side) are filtered by `MessageId` before reaching projection logic, so read-model counters cannot double-increment. Notifications service deliberately does *not* use an inbox: a rare duplicate toast/email is acceptable and adding a dedup store to a Redis-only service is more complication than the failure mode warrants.
 **Read models (EF Core entities → `analytics_db`):**
 ```csharp
 public class TaskEventRecord
@@ -689,6 +696,8 @@ Each service has one xUnit test project in `tests/`. All test projects reference
 - `xunit` + `xunit.runner.visualstudio`
 - `FluentAssertions`
 - `NSubstitute` (mocking)
+- `Bogus` — generates realistic fake users / boards / tasks; avoid hardcoded fixtures in integration tests
+- `NetArchTest.Rules` — assert the §2 onion dependency rule in a build-failing fixture
 - `Microsoft.AspNetCore.Mvc.Testing` (integration)
 - `Testcontainers.PostgreSql` + `Testcontainers.Redis` + `Testcontainers.RabbitMq` (real infra via Docker)
 - `Mediator` (`martinothamar/Mediator`) handlers are plain classes — no special test package needed, inject `IMediator` or call handlers directly
@@ -699,6 +708,14 @@ Example: `AuthService_Login_WithInvalidPassword_ReturnsUnauthorized`
 
 #### Integration tests
 Use `WebApplicationFactory<Program>` with a real Testcontainers database spun up per test class (`IAsyncLifetime`). No mocking of infrastructure — test against real postgres/redis/rabbitmq containers.
+
+#### Architecture tests
+Each service test project includes one fixture using **NetArchTest.Rules** asserting the onion dependency rule from §2:
+- `Domain` references no external NuGet packages
+- `Application` does not reference `Infrastructure`
+- `Infrastructure` is not referenced by `Domain` or `Application`
+
+These tests fail the build if a layer leak is introduced — the only practical guard against gradual erosion of the architecture.
 
 #### What to test per service
 | Service       | Unit tests                                      | Integration tests                                   |
@@ -892,6 +909,8 @@ export const environment = {
 ## 8. Cross-cutting concerns
 ### Logging
 All services use Serilog, sink to Seq (`http://seq:5341`). Log format includes `ServiceName`, `TraceId`, `UserId`. Minimum level: `Information` in production, `Debug` in development.
+
+**Conventions** — always use Serilog message templates: `_logger.LogInformation("Board {BoardId} created by {UserId}", boardId, userId)`. Never string-interpolate into the log call (e.g. `LogInformation($"Board {boardId} ...")`), as that defeats structured search in Seq. Enrich per-request context with `LogContext.PushProperty("CorrelationId", id)` inside middleware so every downstream log carries it without parameter plumbing.
 ### Correlation IDs
 Gateway generates `X-Correlation-Id` (UUID) on each request and forwards it downstream. Each service logs it and passes it in messages published to RabbitMQ.
 ### Health checks
@@ -1280,6 +1299,8 @@ ENTRYPOINT ["dotnet", "TaskManager.Identity.dll"]
 ## 11. Claude Code prompts — implementation order
 Use these prompts in sequence. Each feature step is preceded by a test step. **Do not write production code until its test step is complete and all tests are red.**
 
+Every service test step below also adds a `NetArchTest.Rules` architecture fixture asserting the §2 onion dependency rule for that service (Domain → no NuGet, Application → no Infrastructure, Infrastructure → not referenced inward). This is not repeated in each step; treat it as a standing requirement.
+
 ### Step 1 — Scaffold solution + infra
 ```
 Using the spec in smart-task-manager-spec.md, scaffold the full .NET solution:
@@ -1384,8 +1405,10 @@ Application layer:
 
 Infrastructure layer:
 - TasksDbContext (implements IUnitOfWork), EF entity configs, migrations
+- Map Color as an EF Core owned entity of Label (single column labels.color)
 - Repository implementations
 - MassTransit publisher for all 6 event types per §4.3
+- Enable MassTransit EF Core outbox on TasksDbContext so events are persisted in the same transaction as aggregate changes (no events lost on crash)
 
 Presentation layer:
 - BoardEndpoints, TaskEndpoints as Minimal API groups
@@ -1446,6 +1469,7 @@ Integration tests (Testcontainers PostgreSQL + RabbitMQ, WebApplicationFactory):
 Implement TaskManager.Analytics per §4.5 until all tests from Step 5a are green:
 - EF Core read models and DbContext
 - MassTransit consumers projecting events to read models
+- Enable MassTransit EF Core inbox on AnalyticsDbContext to deduplicate consumed messages by MessageId
 - All 4 REST endpoints
 - Serilog + health checks per §8
 ```
