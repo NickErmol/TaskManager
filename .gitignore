@@ -26,7 +26,7 @@ yarn-error.log*
 .env.local
 .env.*.local
 appsettings.Local.json
-appsettings.Development.json
+# appsettings.Development.json is committed (non-secret local-dev defaults per spec §9)
 
 # Docker
 *.override.env
