@@ -176,6 +176,7 @@ No Controllers. Each service uses Minimal API `RouteGroupBuilder` extension meth
 | `redis`           | redis:7-alpine               | 6379  | Notification prefs + cache       |
 | `rabbitmq`        | rabbitmq:3-management-alpine | 5672  | Message bus (management: 15672)  |
 | `seq`             | datalust/seq:latest          | 5341  | Structured log aggregation       |
+| `mailhog`         | mailhog/mailhog              | 1025/8025 | Local SMTP catcher (override only) |
 | `angular-dev`     | node:22-alpine               | 4200  | Angular dev server (override only)|
 ### Per-service databases
 Each service creates its own database on startup via EF Core migrations. Database names: `identity_db`, `tasks_db`, `analytics_db`.  
@@ -192,7 +193,7 @@ Every service exposes `GET /health`. Docker Compose `healthcheck` uses this. Ser
 - Validate JWT Bearer tokens on all routes except `/api/auth/**`
 - Forward `X-User-Id` and `X-User-Email` headers to downstream services (extracted from JWT claims)
 - Rate limiting: 100 req/min per IP (use ASP.NET Core rate limiting middleware)
-- CORS policy allowing `http://localhost:4200`
+- CORS policy: origin `http://localhost:4200`; methods `GET, POST, PUT, DELETE, OPTIONS`; headers `Authorization, Content-Type, X-Correlation-Id, If-Match`; **AllowCredentials** (required for the refresh cookie)
 **YARP route configuration:**
 | Route prefix           | Downstream cluster    | Auth required |
 |------------------------|-----------------------|---------------|
@@ -222,8 +223,10 @@ Every service exposes `GET /health`. Docker Compose `healthcheck` uses this. Ser
 **No business logic.** The gateway must not contain domain code.
 ---
 ### 4.2 Identity Service — `TaskManager.Identity`
-**Technology:** .NET 10 · ASP.NET Core Identity · EF Core 10 · PostgreSQL · BCrypt
+**Technology:** .NET 10 · ASP.NET Core Identity · Mediator (martinothamar) · EF Core 10 · PostgreSQL · BCrypt
 **Layer structure:** Domain → Application → Infrastructure → Presentation (see §2 Architecture principles)
+
+**Documented exception to the rich-model rule** — `AppUser` inherits `IdentityUser<Guid>`, which exposes public setters on inherited properties (`Email`, `UserName`, `EmailConfirmed`, `LockoutEnd`, …). This is the *only* entity in the project exempt from the "all setters private" rule; the exemption is necessary because ASP.NET Core Identity's `UserManager` writes to those properties directly. Every other entity in every other service follows the rule strictly.
 
 **Domain model (rich — private setters, factory methods, behavior):**
 ```csharp
@@ -232,12 +235,12 @@ public class AppUser : IdentityUser<Guid>
 {
     public string DisplayName { get; private set; } = default!;
     public string? AvatarUrl { get; private set; }
-    public DateTime CreatedAt { get; private set; }
+    public DateTimeOffset CreatedAt { get; private set; }
 
     private AppUser() { } // EF Core / Identity
 
     public static AppUser Create(string email, string displayName)
-        => new() { Email = email, UserName = email, DisplayName = displayName, CreatedAt = DateTime.UtcNow };
+        => new() { Email = email, UserName = email, DisplayName = displayName, CreatedAt = DateTimeOffset.UtcNow };
 
     public void UpdateProfile(string displayName, string? avatarUrl)
     {
@@ -252,17 +255,17 @@ public class RefreshToken
     public Guid Id { get; private set; }
     public Guid UserId { get; private set; }
     public string Token { get; private set; } = default!; // opaque random 64-byte hex
-    public DateTime ExpiresAt { get; private set; }
+    public DateTimeOffset ExpiresAt { get; private set; }
     public bool IsRevoked { get; private set; }
-    public DateTime CreatedAt { get; private set; }
+    public DateTimeOffset CreatedAt { get; private set; }
 
     private RefreshToken() { }
 
-    public static RefreshToken Create(Guid userId, string token, DateTime expiresAt)
-        => new() { Id = Guid.NewGuid(), UserId = userId, Token = token, ExpiresAt = expiresAt, CreatedAt = DateTime.UtcNow };
+    public static RefreshToken Create(Guid userId, string token, DateTimeOffset expiresAt)
+        => new() { Id = Guid.NewGuid(), UserId = userId, Token = token, ExpiresAt = expiresAt, CreatedAt = DateTimeOffset.UtcNow };
 
     public void Revoke() => IsRevoked = true;
-    public bool IsValid() => !IsRevoked && ExpiresAt > DateTime.UtcNow;
+    public bool IsValid() => !IsRevoked && ExpiresAt > DateTimeOffset.UtcNow;
 }
 ```
 
@@ -305,7 +308,7 @@ public interface IUnitOfWork
 - Refresh token: opaque random token (64-byte cryptographic random, hex-encoded), 7-day expiry, stored hashed (SHA-256) in `refresh_tokens` table — the plaintext token only ever leaves the server in the cookie
 - On refresh: validate token exists + not revoked + not expired → issue new pair + revoke old token (rotation)
 - **Password hashing**: BCrypt via `BCrypt.Net-Next` with work factor 12. Never log password values or refresh-token plaintext.
-- **Refresh-token cookie attributes**: `HttpOnly; Secure; SameSite=Strict; Path=/api/auth/refresh` — unreadable from JavaScript and not sent on cross-site requests, which removes the CSRF surface on the refresh endpoint. (Access token lives in memory on the SPA and travels via `Authorization: Bearer`, so it is not cookie-bound and not CSRF-exposed.)
+- **Refresh-token cookie attributes**: `HttpOnly; Secure; SameSite=Strict; Path=/api/auth/refresh` — unreadable from JavaScript and not sent on cross-site requests, which removes the CSRF surface on the refresh endpoint. (Access token lives in memory on the SPA and travels via `Authorization: Bearer`, so it is not cookie-bound and not CSRF-exposed.) **Cross-domain deployment caveat:** `SameSite=Strict` blocks the refresh cookie if the SPA and API are not same eTLD+1 — see §10 *Deployment compatibility — refresh cookie* before deploying SPA and API to unrelated public domains.
 - **Reuse detection**: if a refresh token that is *already revoked* is presented, treat it as token theft — revoke every refresh token belonging to that user and return 401. Forces the attacker and the legitimate user both to re-authenticate.
 **Request/response DTOs:**
 ```csharp
@@ -357,7 +360,7 @@ public class Board
     public string Name { get; private set; } = default!;
     public string? Description { get; private set; }
     public Guid OwnerId { get; private set; }
-    public DateTime CreatedAt { get; private set; }
+    public DateTimeOffset CreatedAt { get; private set; }
 
     private readonly List<BoardMember> _members = [];
     private readonly List<TaskItem> _tasks = [];
@@ -368,7 +371,7 @@ public class Board
 
     public static Board Create(string name, Guid ownerId, string? description = null)
     {
-        var board = new Board { Id = Guid.NewGuid(), Name = name, Description = description, OwnerId = ownerId, CreatedAt = DateTime.UtcNow };
+        var board = new Board { Id = Guid.NewGuid(), Name = name, Description = description, OwnerId = ownerId, CreatedAt = DateTimeOffset.UtcNow };
         board._members.Add(BoardMember.Create(board.Id, ownerId, BoardRole.Owner));
         return board;
     }
@@ -403,10 +406,11 @@ public class TaskItem
     public TaskPriority Priority { get; private set; }
     public Guid CreatedBy { get; private set; }
     public Guid? AssignedTo { get; private set; }
-    public DateTime? DueDate { get; private set; }
+    public DateTimeOffset? DueDate { get; private set; }
     public int Position { get; private set; }
-    public DateTime CreatedAt { get; private set; }
-    public DateTime UpdatedAt { get; private set; }
+    public DateTimeOffset CreatedAt { get; private set; }
+    public DateTimeOffset UpdatedAt { get; private set; }
+    public byte[] RowVersion { get; private set; } = default!; // EF Core concurrency token
 
     private readonly List<TaskLabel> _labels = [];
     private readonly List<TaskComment> _comments = [];
@@ -415,15 +419,15 @@ public class TaskItem
 
     private TaskItem() { }
 
-    public static TaskItem Create(Guid boardId, string title, Guid createdBy, TaskPriority priority, DateTime? dueDate = null)
+    public static TaskItem Create(Guid boardId, string title, Guid createdBy, TaskPriority priority, DateTimeOffset? dueDate = null)
         => new() { Id = Guid.NewGuid(), BoardId = boardId, Title = title, CreatedBy = createdBy,
                    Priority = priority, Status = TaskStatus.Todo, DueDate = dueDate,
-                   Position = 0, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+                   Position = 0, CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow };
 
-    public void Move(TaskStatus newStatus, int position) { Status = newStatus; Position = position; UpdatedAt = DateTime.UtcNow; }
-    public void Assign(Guid? userId) { AssignedTo = userId; UpdatedAt = DateTime.UtcNow; }
-    public void Update(string title, string? description, TaskPriority priority, DateTime? dueDate)
-        { Title = title; Description = description; Priority = priority; DueDate = dueDate; UpdatedAt = DateTime.UtcNow; }
+    public void Move(TaskStatus newStatus, int position) { Status = newStatus; Position = position; UpdatedAt = DateTimeOffset.UtcNow; }
+    public void Assign(Guid? userId) { AssignedTo = userId; UpdatedAt = DateTimeOffset.UtcNow; }
+    public void Update(string title, string? description, TaskPriority priority, DateTimeOffset? dueDate)
+        { Title = title; Description = description; Priority = priority; DueDate = dueDate; UpdatedAt = DateTimeOffset.UtcNow; }
     public TaskComment AddComment(Guid authorId, string body) { var c = TaskComment.Create(Id, authorId, body); _comments.Add(c); return c; }
     public void AddLabel(Guid labelId) { if (!_labels.Any(l => l.LabelId == labelId)) _labels.Add(new TaskLabel { TaskId = Id, LabelId = labelId }); }
     public void RemoveLabel(Guid labelId) => _labels.RemoveAll(l => l.LabelId == labelId);
@@ -435,11 +439,11 @@ public class BoardMember
     public Guid BoardId { get; private set; }
     public Guid UserId { get; private set; }
     public BoardRole Role { get; private set; }
-    public DateTime JoinedAt { get; private set; }
+    public DateTimeOffset JoinedAt { get; private set; }
 
     private BoardMember() { }
     public static BoardMember Create(Guid boardId, Guid userId, BoardRole role)
-        => new() { BoardId = boardId, UserId = userId, Role = role, JoinedAt = DateTime.UtcNow };
+        => new() { BoardId = boardId, UserId = userId, Role = role, JoinedAt = DateTimeOffset.UtcNow };
 }
 
 // Domain/Entities/Label.cs
@@ -466,15 +470,18 @@ public class TaskComment
     public Guid TaskId { get; private set; }
     public Guid AuthorId { get; private set; }
     public string Body { get; private set; } = default!;
-    public DateTime CreatedAt { get; private set; }
-    public DateTime? EditedAt { get; private set; }
+    public DateTimeOffset CreatedAt { get; private set; }
+    public DateTimeOffset? EditedAt { get; private set; }
 
     private TaskComment() { }
     public static TaskComment Create(Guid taskId, Guid authorId, string body)
-        => new() { Id = Guid.NewGuid(), TaskId = taskId, AuthorId = authorId, Body = body, CreatedAt = DateTime.UtcNow };
-    public void Edit(string body) { Body = body; EditedAt = DateTime.UtcNow; }
+        => new() { Id = Guid.NewGuid(), TaskId = taskId, AuthorId = authorId, Body = body, CreatedAt = DateTimeOffset.UtcNow };
+    public void Edit(string body) { Body = body; EditedAt = DateTimeOffset.UtcNow; }
 }
 ```
+
+**Optimistic concurrency on `TaskItem`**
+The `RowVersion` column is mapped as an EF Core concurrency token (`builder.Property(t => t.RowVersion).IsRowVersion()`). All write endpoints that mutate a task — `PUT /api/tasks/{id}`, `POST /api/tasks/{id}/move`, `POST /api/tasks/{id}/assign`, `PUT /api/tasks/{id}/comments/{commentId}` — require an `If-Match` header carrying the base64-encoded `RowVersion` the client last observed. The endpoint returns the current `RowVersion` in an `ETag` header on every read and write. A mismatch surfaces as `DbUpdateConcurrencyException`, which the handler maps to `Result.Fail("conflict: task was modified")`; the presentation layer translates that to **409 Conflict** with the current task body so the SPA can refetch + toast.
 
 **Domain — repository interfaces:**
 ```csharp
@@ -583,6 +590,9 @@ public static IResult ToHttpResult<T>(this Result<T> result) => result switch
 | DELETE | `/api/boards/{id}/labels/{labelId}`      | Delete label                       |
 | POST   | `/api/tasks/{id}/labels/{labelId}`       | Add label to task                  |
 | DELETE | `/api/tasks/{id}/labels/{labelId}`       | Remove label from task             |
+
+**Pagination policy (v1)** — `GET /api/tasks` returns at most **200 results** per call. No skip/limit/cursor params in v1; if the filtered result set exceeds the cap, the handler returns the first 200 (ordered by `UpdatedAt DESC`) and sets response header `X-Result-Truncated: true`. Pagination is a v2 concern. The SPA should display a non-blocking notice when the header is present (boards routinely exceed 200 tasks is itself an indication to revisit the v2 paging design).
+
 **Authorization rules:**
 - All task/board operations require the acting user to be a board member
 - Only `Owner` role can delete boards, add/remove members, create/delete labels
@@ -591,12 +601,12 @@ public static IResult ToHttpResult<T>(this Result<T> result) => result switch
 **Events published to RabbitMQ (exchange: `task-manager`, type: topic):**
 ```csharp
 // All in TaskManager.Contracts namespace
-record TaskCreatedEvent(Guid TaskId, Guid BoardId, string Title, Guid CreatedBy, DateTime CreatedAt);
-record TaskAssignedEvent(Guid TaskId, Guid BoardId, string Title, Guid AssignedTo, Guid AssignedBy, DateTime DueDate?);
+record TaskCreatedEvent(Guid TaskId, Guid BoardId, string Title, Guid CreatedBy, DateTimeOffset CreatedAt);
+record TaskAssignedEvent(Guid TaskId, Guid BoardId, string Title, Guid AssignedTo, Guid AssignedBy, DateTimeOffset DueDate?);
 record TaskStatusChangedEvent(Guid TaskId, Guid BoardId, string Title, string OldStatus, string NewStatus, Guid ChangedBy);
-record TaskCompletedEvent(Guid TaskId, Guid BoardId, string Title, Guid CompletedBy, DateTime CompletedAt);
+record TaskCompletedEvent(Guid TaskId, Guid BoardId, string Title, Guid CompletedBy, DateTimeOffset CompletedAt);
 record TaskCommentAddedEvent(Guid TaskId, Guid BoardId, Guid CommentId, Guid AuthorId, string Body);
-record DeadlineApproachingEvent(Guid TaskId, Guid BoardId, string Title, Guid AssignedTo, DateTime DueDate);
+record DeadlineApproachingEvent(Guid TaskId, Guid BoardId, string Title, Guid AssignedTo, DateTimeOffset DueDate);
 ```
 Routing keys: `task.created`, `task.assigned`, `task.status-changed`, `task.completed`, `task.comment-added`, `task.deadline-approaching`
 `DeadlineApproachingEvent` is published by a background `IHostedService` that queries tasks due in the next 24 hours and runs every hour.
@@ -615,6 +625,7 @@ Enable `AddEntityFrameworkOutbox<TasksDbContext>` on the bus configuration. Doma
 **SignalR hub:** `NotificationsHub` at `/hubs/notifications`
 - Clients join a group named after their user ID on connect
 - Server method: `SendNotification(NotificationDto notification)`
+- **Auth:** browsers cannot set headers on the WebSocket handshake, so the JWT is passed via query string. SPA uses `accessTokenFactory: () => authStore.accessToken()` when calling `withUrl('/hubs/notifications', { accessTokenFactory })`. The gateway forwards the WS request to this service; the service wires `JwtBearerEvents.OnMessageReceived` to lift `access_token` off `context.Request.Query` whenever the path starts with `/hubs/`, so the standard `[Authorize]` attribute on the hub works unchanged.
 **NotificationDto:**
 ```csharp
 record NotificationDto(
@@ -625,7 +636,7 @@ record NotificationDto(
     Guid? RelatedTaskId,
     Guid? RelatedBoardId,
     bool IsRead,
-    DateTime CreatedAt
+    DateTimeOffset CreatedAt
 );
 ```
 **Event → notification mapping:**
@@ -652,6 +663,12 @@ record NotificationPreferences(
     bool EmailOnCompleted       // default: false
 );
 ```
+
+**Redis schema**
+- **Notification history** — per-user sorted set at key `notifications:user:{userId}`. Score = unix-ms timestamp; value = JSON-serialised `NotificationDto`. On write: `ZADD` the new entry, then `ZREMRANGEBYRANK 0 -51` to keep only the 50 newest, then `EXPIRE 2592000` (30 days, refreshed on every write so the key persists for active users).
+- **Preferences** — per-user hash at key `prefs:user:{userId}`, fields match `NotificationPreferences`. No TTL (preferences persist for the account lifetime).
+- **Read state** — a boolean flag per notification is stored *inside* the JSON value in the sorted set (set via read-modify-write); avoids a second key per notification.
+
 **Email:** Use MailKit with SMTP settings from environment variables. For local dev, use Mailhog (`mailhog/mailhog` docker image on port 1025/8025). Simple HTML templates, no external template engine needed.
 ---
 ### 4.5 Analytics Service — `TaskManager.Analytics`
@@ -668,7 +685,7 @@ public class TaskEventRecord
     public Guid BoardId { get; set; }
     public string EventType { get; set; }
     public Guid UserId { get; set; }
-    public DateTime OccurredAt { get; set; }
+    public DateTimeOffset OccurredAt { get; set; }
 }
 public class BoardStats
 {
@@ -676,7 +693,7 @@ public class BoardStats
     public int TotalTasks { get; set; }
     public int CompletedTasks { get; set; }
     public int OverdueTasks { get; set; }
-    public DateTime LastUpdated { get; set; }
+    public DateTimeOffset LastUpdated { get; set; }
 }
 public class UserStats
 {
@@ -684,7 +701,7 @@ public class UserStats
     public int TasksCreated { get; set; }
     public int TasksCompleted { get; set; }
     public int TasksAssigned { get; set; }
-    public DateTime LastUpdated { get; set; }
+    public DateTimeOffset LastUpdated { get; set; }
 }
 ```
 **Endpoints:**
@@ -778,6 +795,9 @@ src/app/
 │   └── pipes/             # relative-time, truncate
 └── app.routes.ts
 ```
+### Implementation phasing
+The auth shell — `core/auth/` (AuthStore, AuthGuard, AuthInterceptor, RefreshInterceptor), `core/http/api-base.ts`, and the `features/auth/` login + register components — is built **in Step 2b alongside the Identity service**, not deferred to Step 7. This way each backend service has a usable browser entry point as it lands. Step 7 fills in the remaining `features/` (boards, tasks, analytics) and `shared/components/`.
+
 ### Routes
 | Path                   | Component              | Guard      |
 |------------------------|------------------------|------------|
@@ -811,7 +831,7 @@ interface AuthState {
 - Clicking a notification navigates to the related task
 ### HTTP interceptors
 - `AuthInterceptor`: attaches `Authorization: Bearer <token>` to all requests except `/api/auth/**`
-- `RefreshInterceptor`: on 401 response, attempts token refresh once, retries request, on second failure logs out
+- `RefreshInterceptor`: on 401 response, attempts token refresh once, retries request, on second failure logs out. **Concurrent 401 handling:** only one refresh call may be in flight at a time. The interceptor holds a module-level `refreshInFlight$: ReplaySubject<string> | null`. The first 401 sets it to a new subject and calls `/api/auth/refresh`; subsequent 401s while it's non-null subscribe to the same subject and retry once the token arrives. On refresh failure all queued requests propagate the error and the store logs out. This avoids N concurrent 401s triggering N refresh calls and walking the user's refresh-token rotation chain.
 - `ErrorInterceptor`: catches unhandled HTTP errors, maps to user-facing messages, logs to console in dev
 
 ### TypeScript & compiler configuration
@@ -908,12 +928,28 @@ CI (`ng lint`) must pass with zero errors.
 
 ### Environment configuration
 ```typescript
-// environment.ts
+// environment.ts                    (local dev)
 export const environment = {
   apiUrl: 'http://localhost:5000',
-  production: false
+  production: false,
+  environment: 'local',
+};
+
+// environment.staging.ts            (Vercel preview / develop branch)
+export const environment = {
+  apiUrl: 'https://api-staging.<your-domain>',  // gateway URL on Fly.io staging
+  production: false,
+  environment: 'staging',
+};
+
+// environment.prod.ts               (Vercel production / main branch)
+export const environment = {
+  apiUrl: 'https://api.<your-domain>',
+  production: true,
+  environment: 'production',
 };
 ```
+`angular.json` declares matching `configurations` blocks (`staging`, `production`) with `fileReplacements` so `--configuration staging` and `--configuration production` swap the right file at build time. The CI workflows in §10 invoke these.
 ---
 ## 8. Cross-cutting concerns
 ### Logging
@@ -927,13 +963,30 @@ Each service registers:
 - Self: `AddHealthChecks().AddCheck("self", () => HealthCheckResult.Healthy())`
 - Dependencies: postgres, redis, or rabbitmq as appropriate
 - Endpoint: `GET /health` (returns 200 with JSON detail)
+
+**NuGet packages** — `AspNetCore.HealthChecks.NpgSql` (Postgres dependency check), `AspNetCore.HealthChecks.Redis` (Notifications + any service caching), `AspNetCore.HealthChecks.Rabbitmq` (Tasks + Notifications + Analytics — anything publishing or consuming). Register via `services.AddHealthChecks().AddNpgSql(connectionString).AddRedis(...).AddRabbitMQ(...)`.
 ### Error handling
 Each service has a global `ExceptionHandlingMiddleware` that catches unhandled exceptions and returns `ProblemDetails` JSON. Never expose stack traces in production.
 ### Database migrations
 Run on startup via `dbContext.Database.MigrateAsync()` in `Program.cs`. Each service owns its migration history.
 
+### Date and time
+All date/time values are `DateTimeOffset` end-to-end — entity properties, DTOs, API request/response shapes, integration-event records. Stored in PostgreSQL as `timestamptz`. The server is authoritative for "now": services use `DateTimeOffset.UtcNow` (or an injected `IClock` in handlers that need to be test-time-shifted). The Angular SPA receives ISO-8601 strings with offsets and converts to the user's local time **only at display**, never at storage or comparison. Never use `DateTime` in new code; if a third-party API forces `DateTime`, convert at the boundary.
+
 ### Secrets
 All sensitive configuration — `JWT_SECRET`, database connection strings, SMTP credentials, RabbitMQ credentials, Redis URL — comes from environment variables, never from committed config files. `appsettings.json` contains only non-secret defaults; `.env` files are gitignored. In CI/CD the secrets flow from GitHub Actions Secrets → Fly.io secrets (`flyctl secrets set`) and Vercel environment variables. If a secret is ever committed by accident, rotate it before reverting.
+
+**Standard environment variable names** (consistent across local, staging, production):
+| Variable | Used by | Notes |
+|---|---|---|
+| `JWT_SECRET` | All services | HS256 signing key, ≥ 64 bytes random |
+| `IDENTITY_DB_CONNECTION` | Identity | Postgres connection string for `identity_db` |
+| `TASKS_DB_CONNECTION` | Tasks | Postgres connection string for `tasks_db` |
+| `ANALYTICS_DB_CONNECTION` | Analytics | Postgres connection string for `analytics_db` |
+| `REDIS_URL` | Notifications | StackExchange.Redis configuration string |
+| `RABBITMQ_URL` | Tasks, Notifications, Analytics | AMQP URI (e.g. `amqp://guest:guest@rabbitmq:5672`) |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | Notifications | MailKit settings; locally points at Mailhog (`mailhog:1025`, no auth) |
+| `SEQ_URL` | All services | Serilog sink (`http://seq:5341` locally) |
 
 ### Service network isolation
 In production, only the gateway is internet-facing. The four downstream services (`identity`, `tasks`, `notifications`, `analytics`) are reachable **only via the gateway** — on Fly.io that means private 6PN networking with no public ports allocated. This matters because services trust the `X-User-Id` and `X-User-Email` headers the gateway sets from validated JWT claims; if a service were directly reachable, those headers could be spoofed by any caller. Local dev exposes service ports for convenience — production must not.
@@ -1271,6 +1324,19 @@ Vercel automatically creates a **preview URL** for every PR to `develop`
 
 > **Note:** Running all 5 services on Fly.io's free tier simultaneously is tight. For a demo/portfolio project, deploy only what you need to show. `docker compose up` remains the primary development target.
 
+### Deployment compatibility — refresh cookie
+The refresh-token cookie (§4.2) is set with `SameSite=Strict`. That value is **incompatible with cross-site requests** between the SPA and the API. "Cross-site" here means different registrable domains (eTLD+1), e.g. `task-manager.vercel.app` and `task-manager-api.fly.dev`. Local dev is fine because the gateway proxies everything under one origin (`http://localhost:5000`), and the SPA dev server lives on `localhost:4200` — both `localhost`, same registrable domain.
+
+When you deploy SPA + API to real public hosts, pick one of these before going live:
+
+| Option | What it costs | Trade-off |
+|---|---|---|
+| **A. Same eTLD+1** | A custom domain (~$12/yr). Point `app.yourdomain.com` at Vercel and `api.yourdomain.com` at the Fly.io gateway. | Cookie keeps `SameSite=Strict`. **Recommended** — preserves the security pass design verbatim. |
+| **B. Relax cookie to `SameSite=None; Secure` + add CSRF protection** | One extra endpoint (`GET /api/csrf-token`), double-submit-cookie check on `/api/auth/refresh`. | Restores CSRF protection that `Strict` was providing; spec gets a little more complex. |
+| **C. Drop the cookie entirely** | Move refresh token into JS memory like the access token. | No CSRF surface at all, but user is logged out every browser session — no "stay logged in". |
+
+**v1 ships with the current `SameSite=Strict` design.** This subsection exists so the next reviewer knows the constraint and doesn't ship a broken refresh flow on first deploy.
+
 ### Required GitHub repository secrets
 | Secret | Used by | Value source |
 |---|---|---|
@@ -1328,6 +1394,7 @@ Using the spec in smart-task-manager-spec.md, scaffold the full .NET solution:
 - Create TaskManager.Contracts with all event record types from §4.3
 - Create docker-compose.yml with all services from §3 including health checks
 - Create docker-compose.override.yml for local dev (Angular dev server, debug ports)
+- Create `.github/workflows/{ci,cd-staging,cd-production}.yml` exactly as shown in §10. Branch protection on `main`/`develop` (§10) requires CI to exist before a PR can be merged, so these land in Step 1 even though there is nothing to test yet — they will run as services come online in later steps.
 ```
 
 ### Step 2a — Identity service tests (write first, expect red)
@@ -1382,6 +1449,13 @@ Presentation layer:
 - Each endpoint: extract X-User-Id header → dispatch via IMediator → call ToHttpResult()
 - ExceptionHandlingMiddleware returning ProblemDetails
 - Serilog + health checks per §8
+
+Angular auth shell (concurrently — see §7 *Implementation phasing*):
+- Scaffold the Angular 18 project (`ng new`), Angular Material 3, Tailwind, ESLint + Prettier, Jest via jest-preset-angular
+- Build `core/auth/` (AuthStore signal store, AuthGuard, AuthInterceptor, RefreshInterceptor — including the concurrent-401 queue pattern from §7), `core/http/api-base.ts`, `core/notifications/` is stubbed but inactive
+- Build `features/auth/` (LoginComponent, RegisterComponent — smart components, reactive forms)
+- Empty placeholder `BoardListComponent` behind `AuthGuard` so the post-login redirect target exists
+- Acceptance: register → login → see placeholder boards page works end-to-end in a browser against the running Identity service via the gateway
 ```
 
 ### Step 3a — Tasks service tests (write first, expect red)
@@ -1400,6 +1474,8 @@ Integration tests (Testcontainers PostgreSQL + RabbitMQ, WebApplicationFactory):
 - POST /api/tasks/{id}/assign — publishes TaskAssignedEvent
 - POST /api/tasks/{id}/comments — publishes TaskCommentAddedEvent
 - DELETE /api/boards/{id} — only Owner succeeds; Editor gets 403
+- **Optimistic concurrency**: PUT /api/tasks/{id} with a stale `If-Match` header returns 409, body contains the current task (with updated RowVersion). Two parallel PUTs — second one gets 409 deterministically.
+- **Pagination cap**: seed 201 tasks on a board; GET /api/tasks?boardId=… returns 200 results, `X-Result-Truncated: true` header set.
 ```
 
 ### Step 3b — Tasks service implementation
@@ -1410,11 +1486,13 @@ Follow Onion Architecture from §2.
 Domain layer:
 - Value objects: TaskStatus, TaskPriority, BoardRole enums; Color record with validation
 - Rich entities: Board, TaskItem, BoardMember, Label, TaskComment (all per §4.3 domain model spec)
+- TaskItem has a `byte[] RowVersion` concurrency token; PUT / move / assign / edit-comment endpoints require `If-Match` header. `DbUpdateConcurrencyException` from `SaveChangesAsync` maps to 409 Conflict with current task body in the response. See §4.3 *Optimistic concurrency on TaskItem*.
 - Repository interfaces: IBoardRepository, ITaskRepository, IUnitOfWork
 
 Application layer:
 - All commands + handlers returning Result<T>, depending on repository interfaces only
 - All queries + handlers returning Result<T>
+- `GetTasksQuery` handler enforces the 200-result cap (§4.3 *Pagination policy*) and signals truncation via `Result<(IReadOnlyList<TaskDto>, bool truncated)>`; the endpoint sets `X-Result-Truncated: true` on the response when truncated
 - ValidationBehavior + LoggingBehavior pipeline behaviors
 - IEventPublisher interface (MassTransit implemented in Infrastructure)
 
@@ -1516,42 +1594,44 @@ Implement TaskManager.Gateway per §4.1 until all tests from Step 6a are green:
 - Health check endpoint
 ```
 
-### Step 7a — Angular unit tests (write first, expect red)
+### Step 7a — Angular unit tests for remaining features (write first, expect red)
 ```
-Scaffold the Angular 18 project per §7 (structure only — no logic yet) and write Jest unit tests
-for every file before implementing them. Tests must exist and fail before any logic is written.
+The Angular project, auth shell (AuthStore, interceptors, login/register) already exist from
+Step 2b. This step adds the remaining feature tests. Write Jest unit tests for every file
+before implementing them. Tests must exist and fail before any logic is written.
 
-Create spec files for:
-- AuthStore: login action sets user + token; logout clears state; 401 triggers refresh
-- AuthInterceptor: attaches Authorization header; skips /api/auth/** routes
-- RefreshInterceptor: retries once on 401; logs out on second 401
+Specs already written in Step 2b (do not re-create):
+- AuthStore, AuthInterceptor, RefreshInterceptor (including concurrent-401 queue)
+
+Create new spec files for:
 - BoardsApiService: createBoard(), getBoards(), getBoard() call correct endpoints
-- TasksApiService: createTask(), moveTask(), assignTask() call correct endpoints
+- TasksApiService: createTask(), moveTask(), assignTask() call correct endpoints (and send If-Match header on mutations)
 - NotificationStore: unread count computed from notifications list
-- BoardDetailComponent: renders four columns; drag-drop calls moveTask()
+- BoardListComponent: renders boards; empty state shown when none
+- BoardDetailComponent: renders four columns; drag-drop calls moveTask(); 409 from moveTask() triggers refetch + toast
+- TaskDetailComponent: form pre-populates from task; If-Match header carries current RowVersion
 - NotificationBellComponent: badge shows unread count; dropdown lists last 10
+- AnalyticsDashboardComponent: renders charts from analytics summary endpoints
 ```
 
-### Step 7b — Angular implementation
+### Step 7b — Angular implementation (remaining features)
 ```
-Implement the Angular frontend per §7 until all tests from Step 7a are green, then verify
-manually in a browser. Enforce all conventions from §7:
+Implement the remaining Angular features per §7 until all tests from Step 7a are green, then
+verify manually in a browser. The auth shell (project setup, core/auth, core/http, features/auth,
+ErrorInterceptor) is already in place from Step 2b. Enforce all conventions from §7.
 
-Project setup:
-- Angular 18, strict: true + strictTemplates: true in tsconfig
-- Angular Material 3, TailwindCSS, ESLint (@angular-eslint) + Prettier
-- Jest via jest-preset-angular
+Already done in Step 2b (do not re-implement):
+- Project setup (Angular 18, strict, Material 3, Tailwind, ESLint, Jest)
+- core/auth: AuthStore, AuthGuard, AuthInterceptor, RefreshInterceptor (with concurrent-401 queue)
+- core/http/api-base.ts
+- features/auth: LoginComponent, RegisterComponent
 
-Core (core/):
-- AuthStore (NgRx signalStore): accessToken in memory, refresh token via httpOnly cookie
-- AuthGuard using inject(AuthStore)
-- AuthInterceptor, RefreshInterceptor, ErrorInterceptor (all functional interceptors)
-- Typed API services per microservice (BoardsApiService, TasksApiService, etc.)
-- SignalR NotificationService + NotificationStore
+Core additions:
+- core/notifications/: SignalR NotificationService (uses accessTokenFactory per §4.4 SignalR auth), NotificationStore
+- core/http: BoardsApiService, TasksApiService (sends If-Match header on mutating calls), NotificationsApiService, AnalyticsApiService
 
 Features (all lazy-loaded via loadComponent):
-- auth/: LoginComponent, RegisterComponent (smart, reactive forms)
-- boards/: BoardListComponent (smart), BoardDetailComponent (smart + CDK drag-drop)
+- boards/: BoardListComponent (smart), BoardDetailComponent (smart + CDK drag-drop, handles 409 by refetching + toasting)
 - tasks/: TaskDetailComponent (smart dialog), TaskFormComponent
 - analytics/: AnalyticsDashboardComponent (smart, ngx-charts)
 
