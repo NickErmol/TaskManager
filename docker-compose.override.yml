@@ -1,0 +1,36 @@
+# Local dev overrides — applied automatically by docker compose.
+# Use `docker compose up` to get this merged with docker-compose.yml.
+
+services:
+  gateway:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+  identity-svc:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+  tasks-svc:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+  notifications-svc:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+  analytics-svc:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+  # Angular dev server — only useful once frontend/task-manager-app exists (Step 2b).
+  # Uncomment when you start working on the SPA. Until then the service builds but isn't started.
+  # angular-dev:
+  #   image: node:22-alpine
+  #   container_name: tm-angular-dev
+  #   working_dir: /app
+  #   command: sh -c "npm ci && npm run start -- --host 0.0.0.0 --poll 1000"
+  #   ports:
+  #     - "4200:4200"
+  #   volumes:
+  #     - ./frontend/task-manager-app:/app
+  #     - /app/node_modules
