@@ -213,6 +213,12 @@ Every service exposes `GET /health`. Docker Compose `healthcheck` uses this. Ser
   }
 }
 ```
+
+**Security**
+- **HTTPS-only in production** — gateway listens on HTTPS; plain-HTTP requests are redirected. Local dev over HTTP is fine.
+- **Response-headers middleware** sets on every response: `Strict-Transport-Security: max-age=31536000; includeSubDomains`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, and a CSP allowing `self` for scripts/styles and the SignalR WebSocket origin.
+- **Tighter rate-limit on auth routes** — `/api/auth/login`, `/api/auth/register`, `/api/auth/refresh` use a separate policy capped at 10 req/min per IP (the global 100/min still applies to everything else). Stops credential stuffing without affecting normal app traffic.
+
 **No business logic.** The gateway must not contain domain code.
 ---
 ### 4.2 Identity Service — `TaskManager.Identity`
@@ -296,8 +302,11 @@ public interface IUnitOfWork
 | GET    | `/api/users/search?q=`  | Yes  | Search users by display name or email (for assignment) |
 **Token strategy:**
 - Access token: JWT, 15-minute expiry, signed with HS256, contains `sub` (userId), `email`, `name`
-- Refresh token: opaque random token, 7-day expiry, stored in `refresh_tokens` table
+- Refresh token: opaque random token (64-byte cryptographic random, hex-encoded), 7-day expiry, stored hashed (SHA-256) in `refresh_tokens` table — the plaintext token only ever leaves the server in the cookie
 - On refresh: validate token exists + not revoked + not expired → issue new pair + revoke old token (rotation)
+- **Password hashing**: BCrypt via `BCrypt.Net-Next` with work factor 12. Never log password values or refresh-token plaintext.
+- **Refresh-token cookie attributes**: `HttpOnly; Secure; SameSite=Strict; Path=/api/auth/refresh` — unreadable from JavaScript and not sent on cross-site requests, which removes the CSRF surface on the refresh endpoint. (Access token lives in memory on the SPA and travels via `Authorization: Bearer`, so it is not cookie-bound and not CSRF-exposed.)
+- **Reuse detection**: if a refresh token that is *already revoked* is presented, treat it as token theft — revoke every refresh token belonging to that user and return 401. Forces the attacker and the legitimate user both to re-authenticate.
 **Request/response DTOs:**
 ```csharp
 record RegisterRequest(string Email, string DisplayName, string Password);
@@ -922,6 +931,12 @@ Each service registers:
 Each service has a global `ExceptionHandlingMiddleware` that catches unhandled exceptions and returns `ProblemDetails` JSON. Never expose stack traces in production.
 ### Database migrations
 Run on startup via `dbContext.Database.MigrateAsync()` in `Program.cs`. Each service owns its migration history.
+
+### Secrets
+All sensitive configuration — `JWT_SECRET`, database connection strings, SMTP credentials, RabbitMQ credentials, Redis URL — comes from environment variables, never from committed config files. `appsettings.json` contains only non-secret defaults; `.env` files are gitignored. In CI/CD the secrets flow from GitHub Actions Secrets → Fly.io secrets (`flyctl secrets set`) and Vercel environment variables. If a secret is ever committed by accident, rotate it before reverting.
+
+### Service network isolation
+In production, only the gateway is internet-facing. The four downstream services (`identity`, `tasks`, `notifications`, `analytics`) are reachable **only via the gateway** — on Fly.io that means private 6PN networking with no public ports allocated. This matters because services trust the `X-User-Id` and `X-User-Email` headers the gateway sets from validated JWT claims; if a service were directly reachable, those headers could be spoofed by any caller. Local dev exposes service ports for convenience — production must not.
 ---
 ## 9. Development setup
 ### Prerequisites
