@@ -93,6 +93,11 @@ public static class Flows
     /// <summary>
     /// Mouse-based drag (CDK drag-drop ignores synthetic HTML5 drag events). CDK is
     /// sensitive to gesture timing, so retry until the card lands in the target column.
+    /// The card appears in the target the instant the SPA applies its optimistic move,
+    /// but persistence is an async <c>POST /api/tasks/{id}/move</c> fired afterwards —
+    /// so we also wait for that response before returning. Otherwise a follow-up reload
+    /// or navigation cancels the in-flight request and the move is silently lost (passes
+    /// locally where the POST wins the race, fails on slower CI runners).
     /// </summary>
     public static async Task DragTaskToColumnAsync(IPage page, string title, string columnLabel)
     {
@@ -100,15 +105,24 @@ public static class Flows
 
         for (var attempt = 1; attempt <= 5; attempt++)
         {
+            // Arm the response waiter before the gesture so a fast POST isn't missed.
+            var moveConfirmed = page.WaitForResponseAsync(
+                r => r.Url.Contains("/api/tasks/") && r.Url.Contains("/move"),
+                new() { Timeout = 6000 });
+
             await DragOnceAsync(page, title, columnLabel);
             try
             {
                 await targetCard.WaitForAsync(new() { Timeout = 5000 });
+                var response = await moveConfirmed;
+                if (!response.Ok)
+                    throw new PlaywrightException($"move POST returned HTTP {response.Status}");
                 return;
             }
-            catch (TimeoutException) when (attempt < 5)
+            catch (Exception) when (attempt < 5)
             {
-                // gesture didn't register with CDK — let the board settle and retry
+                // gesture didn't register with CDK, or the move wasn't confirmed —
+                // let the board settle and retry
                 await page.WaitForTimeoutAsync(500);
             }
         }
