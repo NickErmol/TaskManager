@@ -29,9 +29,5 @@
     <Using Include="FluentAssertions" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- TEMPORARY (plan Task 6 note): integration tests reference Infrastructure types that arrive in Task 11. Removed in Task 11. -->
-    <Compile Remove="Integration/**/*.cs" />
-  </ItemGroup>
 
 </Project>
