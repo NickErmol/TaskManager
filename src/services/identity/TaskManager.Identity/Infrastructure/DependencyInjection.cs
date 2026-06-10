@@ -14,10 +14,12 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration config)
     {
-        // Database
-        var connection = config["ConnectionStrings:IdentityDb"]
-                         ?? config["IDENTITY_DB_CONNECTION"]
-                         ?? throw new InvalidOperationException("IDENTITY_DB_CONNECTION is not configured");
+        // Database. Spec §8: the IDENTITY_DB_CONNECTION env var is canonical and must beat
+        // committed appsettings values; empty strings count as missing (appsettings.json ships "").
+        var connection = config["IDENTITY_DB_CONNECTION"];
+        if (string.IsNullOrWhiteSpace(connection)) connection = config["ConnectionStrings:IdentityDb"];
+        if (string.IsNullOrWhiteSpace(connection))
+            throw new InvalidOperationException("IDENTITY_DB_CONNECTION is not configured");
 
         services.AddDbContext<IdentityDbContext>(opt =>
             opt.UseNpgsql(connection, npg => npg.MigrationsHistoryTable("__ef_migrations_history")));

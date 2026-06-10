@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Testcontainers.PostgreSql;
 
 namespace TaskManager.Identity.Tests.Integration;
@@ -22,20 +23,43 @@ public class IdentityWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
     public async Task InitializeAsync()
     {
         await _postgres.StartAsync();
+        // WebApplicationFactory config callbacks (UseSetting / ConfigureAppConfiguration) are
+        // not visible to Program.cs-time reads in minimal-hosting apps, so export the container
+        // endpoint as real environment variables: WebApplication.CreateBuilder's env-var
+        // provider picks them up and beats the committed appsettings values.
+        Environment.SetEnvironmentVariable("IDENTITY_DB_CONNECTION", _postgres.GetConnectionString());
+        Environment.SetEnvironmentVariable("ConnectionStrings__IdentityDb", _postgres.GetConnectionString());
+        Environment.SetEnvironmentVariable("JWT_SECRET", JwtSecret);
+        Environment.SetEnvironmentVariable("Jwt__Issuer", "TaskManager.Identity");
+        Environment.SetEnvironmentVariable("Jwt__Audience", "TaskManager");
     }
 
     public new async Task DisposeAsync()
     {
-        await _postgres.DisposeAsync();
+        // Web host first — it may still talk to the container during teardown.
         await base.DisposeAsync();
+        await _postgres.DisposeAsync();
+        // Process-wide state — clear so no later fixture inherits dead container endpoints.
+        Environment.SetEnvironmentVariable("IDENTITY_DB_CONNECTION", null);
+        Environment.SetEnvironmentVariable("ConnectionStrings__IdentityDb", null);
+        Environment.SetEnvironmentVariable("JWT_SECRET", null);
+        Environment.SetEnvironmentVariable("Jwt__Issuer", null);
+        Environment.SetEnvironmentVariable("Jwt__Audience", null);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
-        builder.UseSetting("IDENTITY_DB_CONNECTION", _postgres.GetConnectionString());
-        builder.UseSetting("JWT_SECRET", JwtSecret);
-        builder.UseSetting("Jwt:Issuer", "TaskManager.Identity");
-        builder.UseSetting("Jwt:Audience", "TaskManager");
+        // ConfigureAppConfiguration providers are appended AFTER appsettings*.json, so these
+        // overrides deterministically beat the committed values (appsettings.json ships an
+        // empty ConnectionStrings:IdentityDb, which is non-null and would otherwise win).
+        builder.ConfigureAppConfiguration((_, cfg) => cfg.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["IDENTITY_DB_CONNECTION"] = _postgres.GetConnectionString(),
+            ["ConnectionStrings:IdentityDb"] = _postgres.GetConnectionString(),
+            ["JWT_SECRET"] = JwtSecret,
+            ["Jwt:Issuer"] = "TaskManager.Identity",
+            ["Jwt:Audience"] = "TaskManager",
+        }));
     }
 }
