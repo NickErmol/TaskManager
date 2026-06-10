@@ -17,19 +17,19 @@ public class EventProjector(IAnalyticsRepository repository, IUnitOfWork uow)
         {
             case TaskCreatedEvent e:
                 Record(e.TaskId, e.BoardId, "task.created", e.CreatedBy, e.CreatedAt);
-                await BumpBoardAsync(e.BoardId, s => s.TotalTasks++, ct);
-                await BumpUserAsync(e.CreatedBy, s => s.TasksCreated++, ct);
+                await repository.ApplyBoardDeltaAsync(e.BoardId, totalDelta: 1, completedDelta: 0, overdueDelta: 0, ct);
+                await repository.ApplyUserDeltaAsync(e.CreatedBy, createdDelta: 1, completedDelta: 0, assignedDelta: 0, ct);
                 break;
 
             case TaskCompletedEvent e:
                 Record(e.TaskId, e.BoardId, "task.completed", e.CompletedBy, e.CompletedAt);
-                await BumpBoardAsync(e.BoardId, s => s.CompletedTasks++, ct);
-                await BumpUserAsync(e.CompletedBy, s => s.TasksCompleted++, ct);
+                await repository.ApplyBoardDeltaAsync(e.BoardId, totalDelta: 0, completedDelta: 1, overdueDelta: 0, ct);
+                await repository.ApplyUserDeltaAsync(e.CompletedBy, createdDelta: 0, completedDelta: 1, assignedDelta: 0, ct);
                 break;
 
             case TaskAssignedEvent e:
                 Record(e.TaskId, e.BoardId, "task.assigned", e.AssignedTo, DateTimeOffset.UtcNow);
-                await BumpUserAsync(e.AssignedTo, s => s.TasksAssigned++, ct);
+                await repository.ApplyUserDeltaAsync(e.AssignedTo, createdDelta: 0, completedDelta: 0, assignedDelta: 1, ct);
                 break;
 
             case TaskStatusChangedEvent e:
@@ -58,18 +58,4 @@ public class EventProjector(IAnalyticsRepository repository, IUnitOfWork uow)
             UserId = userId,
             OccurredAt = occurredAt,
         });
-
-    private async Task BumpBoardAsync(Guid boardId, Action<BoardStats> bump, CancellationToken ct)
-    {
-        var stats = await repository.GetOrAddBoardStatsAsync(boardId, ct);
-        bump(stats);
-        stats.LastUpdated = DateTimeOffset.UtcNow;
-    }
-
-    private async Task BumpUserAsync(Guid userId, Action<UserStats> bump, CancellationToken ct)
-    {
-        var stats = await repository.GetOrAddUserStatsAsync(userId, ct);
-        bump(stats);
-        stats.LastUpdated = DateTimeOffset.UtcNow;
-    }
 }

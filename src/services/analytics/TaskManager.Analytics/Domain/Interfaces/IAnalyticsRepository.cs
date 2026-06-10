@@ -4,9 +4,16 @@ namespace TaskManager.Analytics.Domain.Interfaces;
 
 public interface IAnalyticsRepository
 {
-    /// <summary>Returns the tracked stats row, creating a zeroed one if absent.</summary>
-    Task<BoardStats> GetOrAddBoardStatsAsync(Guid boardId, CancellationToken ct = default);
-    Task<UserStats> GetOrAddUserStatsAsync(Guid userId, CancellationToken ct = default);
+    /// <summary>
+    /// Atomically applies the deltas to the board's stats row, creating it if absent
+    /// (INSERT … ON CONFLICT DO UPDATE). Race-safe: concurrent first-events for one
+    /// board cannot lose an increment or collide on the primary key.
+    /// </summary>
+    Task ApplyBoardDeltaAsync(Guid boardId, int totalDelta, int completedDelta, int overdueDelta, CancellationToken ct = default);
+
+    /// <summary>Atomic upsert-increment of the user's stats row (see ApplyBoardDeltaAsync).</summary>
+    Task ApplyUserDeltaAsync(Guid userId, int createdDelta, int completedDelta, int assignedDelta, CancellationToken ct = default);
+
     void AddEvent(TaskEventRecord record);
 
     Task<BoardStats?> GetBoardStatsAsync(Guid boardId, CancellationToken ct = default);

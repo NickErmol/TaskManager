@@ -90,9 +90,9 @@ public static class DependencyInjection
                 bind.ExchangeType = "topic";
                 bind.RoutingKey = routingKey;
             });
-            // Concurrent first-events for one board/user race on the stats-row
-            // insert (duplicate PK). Retry lets the loser re-run against the now
-            // existing row; the inbox keeps each attempt exactly-once per message.
+            // Stats increments are atomic upserts (race-safe), so no concurrency limit
+            // is needed; retry stays as a backstop for transient DB hiccups and the
+            // inbox keeps each delivery exactly-once per MessageId.
             endpoint.UseMessageRetry(r => r.Intervals(
                 TimeSpan.FromMilliseconds(100),
                 TimeSpan.FromMilliseconds(500),

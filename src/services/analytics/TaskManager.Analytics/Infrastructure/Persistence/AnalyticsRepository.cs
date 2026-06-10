@@ -6,22 +6,36 @@ namespace TaskManager.Analytics.Infrastructure.Persistence;
 
 public class AnalyticsRepository(AnalyticsDbContext db) : IAnalyticsRepository
 {
-    public async Task<BoardStats> GetOrAddBoardStatsAsync(Guid boardId, CancellationToken ct = default)
+    public Task ApplyBoardDeltaAsync(
+        Guid boardId, int totalDelta, int completedDelta, int overdueDelta, CancellationToken ct = default)
     {
-        var stats = await db.BoardStats.FindAsync([boardId], ct);
-        if (stats is not null) return stats;
-        stats = new BoardStats { BoardId = boardId, LastUpdated = DateTimeOffset.UtcNow };
-        db.BoardStats.Add(stats);
-        return stats;
+        var now = DateTimeOffset.UtcNow;
+        // Runs inside the consumer's ambient (inbox) transaction, so it commits
+        // atomically with the TaskEventRecord insert and the inbox state.
+        return db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO board_stats ("BoardId", "TotalTasks", "CompletedTasks", "OverdueTasks", "LastUpdated")
+            VALUES ({boardId}, {totalDelta}, {completedDelta}, {overdueDelta}, {now})
+            ON CONFLICT ("BoardId") DO UPDATE SET
+                "TotalTasks" = board_stats."TotalTasks" + {totalDelta},
+                "CompletedTasks" = board_stats."CompletedTasks" + {completedDelta},
+                "OverdueTasks" = board_stats."OverdueTasks" + {overdueDelta},
+                "LastUpdated" = {now}
+            """, ct);
     }
 
-    public async Task<UserStats> GetOrAddUserStatsAsync(Guid userId, CancellationToken ct = default)
+    public Task ApplyUserDeltaAsync(
+        Guid userId, int createdDelta, int completedDelta, int assignedDelta, CancellationToken ct = default)
     {
-        var stats = await db.UserStats.FindAsync([userId], ct);
-        if (stats is not null) return stats;
-        stats = new UserStats { UserId = userId, LastUpdated = DateTimeOffset.UtcNow };
-        db.UserStats.Add(stats);
-        return stats;
+        var now = DateTimeOffset.UtcNow;
+        return db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO user_stats ("UserId", "TasksCreated", "TasksCompleted", "TasksAssigned", "LastUpdated")
+            VALUES ({userId}, {createdDelta}, {completedDelta}, {assignedDelta}, {now})
+            ON CONFLICT ("UserId") DO UPDATE SET
+                "TasksCreated" = user_stats."TasksCreated" + {createdDelta},
+                "TasksCompleted" = user_stats."TasksCompleted" + {completedDelta},
+                "TasksAssigned" = user_stats."TasksAssigned" + {assignedDelta},
+                "LastUpdated" = {now}
+            """, ct);
     }
 
     public void AddEvent(TaskEventRecord record) => db.TaskEvents.Add(record);
