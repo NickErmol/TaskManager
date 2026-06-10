@@ -54,7 +54,8 @@ const string corsPolicy = "Frontend";
 builder.Services.AddCors(opt => opt.AddPolicy(corsPolicy, policy => policy
     .WithOrigins("http://localhost:4200")
     .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-    .WithHeaders("Authorization", "Content-Type", "X-Correlation-Id", "If-Match")
+    // X-Requested-With / X-SignalR-User-Agent: the SignalR browser client sends both on /hubs negotiate
+    .WithHeaders("Authorization", "Content-Type", "X-Correlation-Id", "If-Match", "X-Requested-With", "X-SignalR-User-Agent")
     .AllowCredentials()));
 
 // Rate limiting: 100 req/min per IP globally; the credential endpoints
@@ -69,11 +70,16 @@ static RateLimitPartition<string> PerIpFixedWindow(HttpContext ctx, int permitLi
             QueueLimit = 0,
         });
 
+// Spec defaults (100 global / 10 auth per minute per IP); configurable so local
+// E2E runs — many registrations from one IP — don't starve themselves.
+var globalPermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:GlobalPermitLimit") ?? 100;
+var authPermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:AuthPermitLimit") ?? 10;
+
 builder.Services.AddRateLimiter(opt =>
 {
     opt.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    opt.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx => PerIpFixedWindow(ctx, 100));
-    opt.AddPolicy("auth", ctx => PerIpFixedWindow(ctx, 10));
+    opt.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx => PerIpFixedWindow(ctx, globalPermitLimit));
+    opt.AddPolicy("auth", ctx => PerIpFixedWindow(ctx, authPermitLimit));
 });
 
 builder.Services.AddReverseProxy()

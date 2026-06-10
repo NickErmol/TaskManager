@@ -1,26 +1,47 @@
 # Local dev overrides — applied automatically by docker compose.
 # Use `docker compose up` to get this merged with docker-compose.yml.
+#
+# Note: running the containers in Development makes appsettings.Development.json
+# win, and that file targets localhost (for `dotnet run`). The Serilog__* and
+# ReverseProxy__* env vars below re-point those values at the compose network
+# (env beats JSON).
 
 services:
   gateway:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      Serilog__WriteTo__1__Args__serverUrl: http://seq:5341
+      ReverseProxy__Clusters__identity-cluster__Destinations__default__Address: http://identity-svc:8080
+      ReverseProxy__Clusters__tasks-cluster__Destinations__default__Address: http://tasks-svc:8080
+      ReverseProxy__Clusters__notifications-cluster__Destinations__default__Address: http://notifications-svc:8080
+      ReverseProxy__Clusters__analytics-cluster__Destinations__default__Address: http://analytics-svc:8080
+      # E2E runs register many users from one IP — spec limits (100/10 per min)
+      # would starve the suite. Production keeps the defaults from Program.cs.
+      RateLimiting__GlobalPermitLimit: "2000"
+      RateLimiting__AuthPermitLimit: "500"
 
   identity-svc:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      Serilog__WriteTo__1__Args__serverUrl: http://seq:5341
 
   tasks-svc:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      Serilog__WriteTo__1__Args__serverUrl: http://seq:5341
+      # Local/E2E: scan for approaching deadlines every minute instead of hourly
+      # so the deadline-email flow is testable. Production keeps the 60-min default.
+      Deadline__ScanIntervalMinutes: "1"
 
   notifications-svc:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      Serilog__WriteTo__1__Args__serverUrl: http://seq:5341
 
   analytics-svc:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      Serilog__WriteTo__1__Args__serverUrl: http://seq:5341
 
   # Angular dev server — only useful once frontend/task-manager-app exists (Step 2b).
   # Uncomment when you start working on the SPA. Until then the service builds but isn't started.

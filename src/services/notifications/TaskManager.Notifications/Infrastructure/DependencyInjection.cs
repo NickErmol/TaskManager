@@ -1,5 +1,6 @@
 using MassTransit;
 using StackExchange.Redis;
+using TaskManager.Contracts.Events;
 using TaskManager.Notifications.Application;
 using TaskManager.Notifications.Application.Interfaces;
 using TaskManager.Notifications.Infrastructure.Email;
@@ -34,6 +35,7 @@ public static class DependencyInjection
             FromAddress: FirstNonEmpty(config, "SMTP_FROM", "Smtp:FromAddress") ?? "noreply@task-manager.local"));
         services.AddSingleton<IEmailSender, MailKitEmailSender>();
 
+        services.AddSingleton<ServiceTokenProvider>();
         services.AddHttpClient<IUserDirectory, IdentityUserDirectory>(client =>
             client.BaseAddress = new Uri(FirstNonEmpty(config, "IDENTITY_URL", "Identity:Url")
                                          ?? "http://localhost:5001"));
@@ -47,11 +49,49 @@ public static class DependencyInjection
             bus.UsingRabbitMq((ctx, cfg) =>
             {
                 cfg.Host(new Uri(rabbitUrl));
-                cfg.ConfigureEndpoints(ctx);
+
+                // Tasks publishes to the topic exchange "task-manager" with one routing
+                // key per event (spec §4.3). Convention-based ConfigureEndpoints binds
+                // queues to per-type exchanges instead, so every message would be
+                // dropped as unroutable. Mirror the publisher topology and bind each
+                // consumer queue explicitly.
+                MapTaskManagerEvent<TaskAssignedEvent>(cfg, "task.assigned");
+                MapTaskManagerEvent<TaskCommentAddedEvent>(cfg, "task.comment-added");
+                MapTaskManagerEvent<TaskCompletedEvent>(cfg, "task.completed");
+                MapTaskManagerEvent<DeadlineApproachingEvent>(cfg, "task.deadline-approaching");
+
+                ReceiveFromTopic<TaskAssignedEventConsumer>(ctx, cfg, "notifications-task-assigned", "task.assigned");
+                ReceiveFromTopic<TaskCommentAddedEventConsumer>(ctx, cfg, "notifications-task-comment-added", "task.comment-added");
+                ReceiveFromTopic<TaskCompletedEventConsumer>(ctx, cfg, "notifications-task-completed", "task.completed");
+                ReceiveFromTopic<DeadlineApproachingEventConsumer>(ctx, cfg, "notifications-deadline-approaching", "task.deadline-approaching");
             });
         });
 
         return services;
+    }
+
+    /// <summary>Publisher-side mapping, identical to the Tasks service (spec §4.3).</summary>
+    private static void MapTaskManagerEvent<T>(IRabbitMqBusFactoryConfigurator cfg, string routingKey) where T : class
+    {
+        cfg.Message<T>(m => m.SetEntityName("task-manager"));
+        cfg.Publish<T>(p => p.ExchangeType = "topic");
+        cfg.Send<T>(s => s.UseRoutingKeyFormatter(_ => routingKey));
+    }
+
+    private static void ReceiveFromTopic<TConsumer>(
+        IBusRegistrationContext ctx, IRabbitMqBusFactoryConfigurator cfg, string queue, string routingKey)
+        where TConsumer : class, IConsumer
+    {
+        cfg.ReceiveEndpoint(queue, endpoint =>
+        {
+            endpoint.ConfigureConsumeTopology = false;
+            endpoint.Bind("task-manager", bind =>
+            {
+                bind.ExchangeType = "topic";
+                bind.RoutingKey = routingKey;
+            });
+            endpoint.ConfigureConsumer<TConsumer>(ctx);
+        });
     }
 
     private static string? FirstNonEmpty(IConfiguration config, params string[] keys)

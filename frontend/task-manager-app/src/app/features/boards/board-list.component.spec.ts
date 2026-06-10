@@ -41,6 +41,21 @@ describe('BoardListComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Backlog');
   });
 
+  it('submits the create form to the store via ngSubmit', () => {
+    // regression: without [formGroup] on the form, (ngSubmit) never fires and the
+    // native submit reloads the page — caught by the Step 8 E2E suite
+    const createSpy = jest.spyOn(store, 'createBoard').mockResolvedValue(null);
+    const input = fixture.nativeElement.querySelector('input[formcontrolname="name"]') as HTMLInputElement;
+    input.value = 'Sprint 9';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    const form = fixture.nativeElement.querySelector('form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit'));
+
+    expect(createSpy).toHaveBeenCalledWith({ name: 'Sprint 9' });
+  });
+
   it('shows the empty state when there are no boards', () => {
     patchState(store, { boards: [], isLoading: false });
     fixture.detectChanges();
