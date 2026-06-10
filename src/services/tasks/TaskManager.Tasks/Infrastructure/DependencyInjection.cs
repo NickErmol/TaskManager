@@ -14,9 +14,12 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration config)
     {
-        var connection = config["ConnectionStrings:TasksDb"]
-                         ?? config["TASKS_DB_CONNECTION"]
-                         ?? throw new InvalidOperationException("TASKS_DB_CONNECTION is not configured");
+        // Spec §8: the TASKS_DB_CONNECTION env var is canonical and must beat committed
+        // appsettings values; empty strings count as missing (appsettings.json ships "").
+        var connection = config["TASKS_DB_CONNECTION"];
+        if (string.IsNullOrWhiteSpace(connection)) connection = config["ConnectionStrings:TasksDb"];
+        if (string.IsNullOrWhiteSpace(connection))
+            throw new InvalidOperationException("TASKS_DB_CONNECTION is not configured");
 
         services.AddDbContext<TasksDbContext>(opt =>
             opt.UseNpgsql(connection, npg => npg.MigrationsHistoryTable("__ef_migrations_history")));

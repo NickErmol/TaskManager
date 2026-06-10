@@ -2,6 +2,7 @@ using MassTransit;
 using MassTransit.Testing;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
 using Testcontainers.RabbitMq;
@@ -49,9 +50,16 @@ public class TasksWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
-        builder.UseSetting("TASKS_DB_CONNECTION", _postgres.GetConnectionString());
-        builder.UseSetting("RABBITMQ_URL", _rabbit.GetConnectionString());
-        builder.UseSetting("OUTBOX_QUERY_DELAY_SECONDS", "1");
+        // ConfigureAppConfiguration providers are appended AFTER appsettings*.json, so these
+        // overrides deterministically beat the committed localhost values in
+        // appsettings.Development.json regardless of read-precedence in production code.
+        builder.ConfigureAppConfiguration((_, cfg) => cfg.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["TASKS_DB_CONNECTION"] = _postgres.GetConnectionString(),
+            ["ConnectionStrings:TasksDb"] = _postgres.GetConnectionString(),
+            ["RABBITMQ_URL"] = _rabbit.GetConnectionString(),
+            ["OUTBOX_QUERY_DELAY_SECONDS"] = "1",
+        }));
         // Wraps the bus already registered by AddTasksInfrastructure; transport becomes
         // the in-memory test transport, which is what Harness.Published observes.
         builder.ConfigureServices(services => services.AddMassTransitTestHarness());

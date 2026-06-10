@@ -33,9 +33,10 @@ builder.Services.AddScoped<DeadlineScanner>();
 builder.Services.AddHostedService<DeadlineWorker>();
 
 // Health checks per spec §8
-var connectionForHealth = builder.Configuration["ConnectionStrings:TasksDb"]
-                          ?? builder.Configuration["TASKS_DB_CONNECTION"]
-                          ?? string.Empty;
+// Env var first (spec §8) and empty-as-missing — same precedence as AddTasksInfrastructure.
+var connectionForHealth = builder.Configuration["TASKS_DB_CONNECTION"];
+if (string.IsNullOrWhiteSpace(connectionForHealth))
+    connectionForHealth = builder.Configuration["ConnectionStrings:TasksDb"] ?? string.Empty;
 builder.Services
     .AddHealthChecks()
     .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy())

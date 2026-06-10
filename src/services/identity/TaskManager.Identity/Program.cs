@@ -54,9 +54,10 @@ builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddSingleton<IdentityMapper>();
 
 // Health checks
-var connectionForHealth = builder.Configuration["ConnectionStrings:IdentityDb"]
-                          ?? builder.Configuration["IDENTITY_DB_CONNECTION"]
-                          ?? string.Empty;
+// Env var first (spec §8) and empty-as-missing — same precedence as AddIdentityInfrastructure.
+var connectionForHealth = builder.Configuration["IDENTITY_DB_CONNECTION"];
+if (string.IsNullOrWhiteSpace(connectionForHealth))
+    connectionForHealth = builder.Configuration["ConnectionStrings:IdentityDb"] ?? string.Empty;
 builder.Services
     .AddHealthChecks()
     .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy())

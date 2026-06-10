@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Testcontainers.PostgreSql;
 
 namespace TaskManager.Identity.Tests.Integration;
@@ -33,9 +34,16 @@ public class IdentityWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
-        builder.UseSetting("IDENTITY_DB_CONNECTION", _postgres.GetConnectionString());
-        builder.UseSetting("JWT_SECRET", JwtSecret);
-        builder.UseSetting("Jwt:Issuer", "TaskManager.Identity");
-        builder.UseSetting("Jwt:Audience", "TaskManager");
+        // ConfigureAppConfiguration providers are appended AFTER appsettings*.json, so these
+        // overrides deterministically beat the committed values (appsettings.json ships an
+        // empty ConnectionStrings:IdentityDb, which is non-null and would otherwise win).
+        builder.ConfigureAppConfiguration((_, cfg) => cfg.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["IDENTITY_DB_CONNECTION"] = _postgres.GetConnectionString(),
+            ["ConnectionStrings:IdentityDb"] = _postgres.GetConnectionString(),
+            ["JWT_SECRET"] = JwtSecret,
+            ["Jwt:Issuer"] = "TaskManager.Identity",
+            ["Jwt:Audience"] = "TaskManager",
+        }));
     }
 }
