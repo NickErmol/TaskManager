@@ -5,6 +5,7 @@ namespace TaskManager.Tasks.Domain.Interfaces;
 
 public interface IBoardRepository
 {
+    /// <summary>Loads the full board aggregate — Members, Labels, and Tasks (with their labels) are eagerly loaded. Role checks via GetRole depend on this.</summary>
     Task<Board?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<Board?> GetByIdWithTasksAsync(Guid id, CancellationToken ct = default);
     Task<List<Board>> GetByMemberAsync(Guid userId, CancellationToken ct = default);

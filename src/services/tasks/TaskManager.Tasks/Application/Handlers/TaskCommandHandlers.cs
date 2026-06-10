@@ -89,11 +89,14 @@ public class MoveTaskCommandHandler(ITaskRepository tasks, IBoardRepository boar
         var oldStatus = task.Status;
         task.Move(newStatus, cmd.Position);
 
-        await publisher.PublishAsync(new TaskStatusChangedEvent(
-            task.Id, task.BoardId, task.Title, oldStatus.ToString(), newStatus.ToString(), cmd.UserId), ct);
-        if (newStatus == TaskStatus.Done && oldStatus != TaskStatus.Done)
-            await publisher.PublishAsync(new TaskCompletedEvent(
-                task.Id, task.BoardId, task.Title, cmd.UserId, DateTimeOffset.UtcNow), ct);
+        if (oldStatus != newStatus)
+        {
+            await publisher.PublishAsync(new TaskStatusChangedEvent(
+                task.Id, task.BoardId, task.Title, oldStatus.ToString(), newStatus.ToString(), cmd.UserId), ct);
+            if (newStatus == TaskStatus.Done)
+                await publisher.PublishAsync(new TaskCompletedEvent(
+                    task.Id, task.BoardId, task.Title, cmd.UserId, task.UpdatedAt), ct);
+        }
 
         try { await uow.SaveChangesAsync(ct); }
         catch (ConcurrencyConflictException) { return Result.Fail(TaskAccess.Conflict); }

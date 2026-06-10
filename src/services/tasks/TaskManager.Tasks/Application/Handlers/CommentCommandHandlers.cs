@@ -27,7 +27,7 @@ public class AddCommentCommandHandler(ITaskRepository tasks, IBoardRepository bo
     }
 }
 
-public class EditCommentCommandHandler(ITaskRepository tasks, IUnitOfWork uow, TasksMapper mapper)
+public class EditCommentCommandHandler(ITaskRepository tasks, IBoardRepository boards, IUnitOfWork uow, TasksMapper mapper)
     : IRequestHandler<EditCommentCommand, Result<CommentDto>>
 {
     public async ValueTask<Result<CommentDto>> Handle(EditCommentCommand cmd, CancellationToken ct)
@@ -36,6 +36,8 @@ public class EditCommentCommandHandler(ITaskRepository tasks, IUnitOfWork uow, T
         if (task is null) return Result.Fail("not found: task");
         var comment = task.Comments.FirstOrDefault(c => c.Id == cmd.CommentId);
         if (comment is null) return Result.Fail("not found: comment");
+        if (await boards.GetMemberRoleAsync(task.BoardId, cmd.UserId, ct) is null)
+            return Result.Fail("forbidden: not a board member");
         if (comment.AuthorId != cmd.UserId)
             return Result.Fail("forbidden: only the comment author can edit it");
         if (task.RowVersion != cmd.ExpectedRowVersion) return Result.Fail(TaskAccess.Conflict);
@@ -58,6 +60,8 @@ public class DeleteCommentCommandHandler(ITaskRepository tasks, IBoardRepository
         if (comment is null) return Result.Fail("not found: comment");
 
         var role = await boards.GetMemberRoleAsync(task.BoardId, cmd.UserId, ct);
+        if (role is null)
+            return Result.Fail("forbidden: not a board member");
         if (comment.AuthorId != cmd.UserId && role != BoardRole.Owner)
             return Result.Fail("forbidden: only the author or the board owner can delete a comment");
 

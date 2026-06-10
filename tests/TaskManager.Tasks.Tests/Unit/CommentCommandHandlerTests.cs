@@ -54,7 +54,8 @@ public class CommentCommandHandlerTests
         var author = Guid.NewGuid();
         var comment = task.AddComment(author, "v1");
         _tasks.GetByIdAsync(task.Id, Arg.Any<CancellationToken>()).Returns(task);
-        var handler = new EditCommentCommandHandler(_tasks, _uow, Mapper);
+        SetRole(task.BoardId, author, BoardRole.Editor);
+        var handler = new EditCommentCommandHandler(_tasks, _boards, _uow, Mapper);
 
         var result = await handler.Handle(new EditCommentCommand(task.Id, comment.Id, "v2", task.RowVersion, author), default);
 
@@ -67,11 +68,29 @@ public class CommentCommandHandlerTests
     public async Task EditCommentCommandHandler_Handle_ByOtherUser_ReturnsForbidden()
     {
         var task = Fake.Task(Guid.NewGuid());
-        var comment = task.AddComment(Guid.NewGuid(), "v1");
+        var author = Guid.NewGuid();
+        var comment = task.AddComment(author, "v1");
+        var otherUser = Guid.NewGuid();
         _tasks.GetByIdAsync(task.Id, Arg.Any<CancellationToken>()).Returns(task);
-        var handler = new EditCommentCommandHandler(_tasks, _uow, Mapper);
+        SetRole(task.BoardId, otherUser, BoardRole.Editor);
+        var handler = new EditCommentCommandHandler(_tasks, _boards, _uow, Mapper);
 
-        var result = await handler.Handle(new EditCommentCommand(task.Id, comment.Id, "v2", task.RowVersion, Guid.NewGuid()), default);
+        var result = await handler.Handle(new EditCommentCommand(task.Id, comment.Id, "v2", task.RowVersion, otherUser), default);
+
+        result.Errors[0].Message.Should().StartWith("forbidden");
+    }
+
+    [Fact]
+    public async Task EditCommentCommandHandler_Handle_ByNonMemberAuthor_ReturnsForbidden()
+    {
+        var task = Fake.Task(Guid.NewGuid());
+        var author = Guid.NewGuid();
+        var comment = task.AddComment(author, "v1");
+        _tasks.GetByIdAsync(task.Id, Arg.Any<CancellationToken>()).Returns(task);
+        SetRole(task.BoardId, author, (BoardRole?)null);
+        var handler = new EditCommentCommandHandler(_tasks, _boards, _uow, Mapper);
+
+        var result = await handler.Handle(new EditCommentCommand(task.Id, comment.Id, "v2", task.RowVersion, author), default);
 
         result.Errors[0].Message.Should().StartWith("forbidden");
     }
@@ -104,5 +123,20 @@ public class CommentCommandHandlerTests
         var result = await handler.Handle(new DeleteCommentCommand(task.Id, Guid.NewGuid(), user), default);
 
         result.Errors[0].Message.Should().StartWith("not found");
+    }
+
+    [Fact]
+    public async Task DeleteCommentCommandHandler_Handle_ByNonMemberAuthor_ReturnsForbidden()
+    {
+        var task = Fake.Task(Guid.NewGuid());
+        var author = Guid.NewGuid();
+        var comment = task.AddComment(author, "bye");
+        _tasks.GetByIdAsync(task.Id, Arg.Any<CancellationToken>()).Returns(task);
+        SetRole(task.BoardId, author, (BoardRole?)null);
+        var handler = new DeleteCommentCommandHandler(_tasks, _boards, _uow);
+
+        var result = await handler.Handle(new DeleteCommentCommand(task.Id, comment.Id, author), default);
+
+        result.Errors[0].Message.Should().StartWith("forbidden");
     }
 }

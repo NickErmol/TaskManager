@@ -131,6 +131,23 @@ public class TaskCommandHandlerTests
     }
 
     [Fact]
+    public async Task MoveTaskCommandHandler_Handle_PositionOnlyMove_DoesNotPublishStatusChanged()
+    {
+        var task = Fake.Task(Guid.NewGuid()); // default status is Todo
+        var editor = Guid.NewGuid();
+        _tasks.GetByIdAsync(task.Id, Arg.Any<CancellationToken>()).Returns(task);
+        SetRole(task.BoardId, editor, BoardRole.Editor);
+        var handler = new MoveTaskCommandHandler(_tasks, _boards, _uow, _publisher, Mapper);
+
+        var result = await handler.Handle(new MoveTaskCommand(task.Id, "Todo", 5, task.RowVersion, editor), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Position.Should().Be(5);
+        await _publisher.DidNotReceive().PublishAsync(Arg.Any<TaskStatusChangedEvent>(), Arg.Any<CancellationToken>());
+        await _publisher.DidNotReceive().PublishAsync(Arg.Any<TaskCompletedEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task AssignTaskCommandHandler_Handle_PublishesTaskAssignedEvent()
     {
         var task = Fake.Task(Guid.NewGuid());
