@@ -23,6 +23,15 @@ public class IdentityWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
     public async Task InitializeAsync()
     {
         await _postgres.StartAsync();
+        // WebApplicationFactory config callbacks (UseSetting / ConfigureAppConfiguration) are
+        // not visible to Program.cs-time reads in minimal-hosting apps, so export the container
+        // endpoint as real environment variables: WebApplication.CreateBuilder's env-var
+        // provider picks them up and beats the committed appsettings values.
+        Environment.SetEnvironmentVariable("IDENTITY_DB_CONNECTION", _postgres.GetConnectionString());
+        Environment.SetEnvironmentVariable("ConnectionStrings__IdentityDb", _postgres.GetConnectionString());
+        Environment.SetEnvironmentVariable("JWT_SECRET", JwtSecret);
+        Environment.SetEnvironmentVariable("Jwt__Issuer", "TaskManager.Identity");
+        Environment.SetEnvironmentVariable("Jwt__Audience", "TaskManager");
     }
 
     public new async Task DisposeAsync()

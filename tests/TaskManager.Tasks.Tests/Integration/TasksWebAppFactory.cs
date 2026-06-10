@@ -38,7 +38,17 @@ public class TasksWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
     }
 
     public async Task InitializeAsync()
-        => await Task.WhenAll(_postgres.StartAsync(), _rabbit.StartAsync());
+    {
+        await Task.WhenAll(_postgres.StartAsync(), _rabbit.StartAsync());
+        // WebApplicationFactory config callbacks (UseSetting / ConfigureAppConfiguration) are
+        // not visible to Program.cs-time reads in minimal-hosting apps, so export the container
+        // endpoints as real environment variables: WebApplication.CreateBuilder's env-var
+        // provider picks them up and beats the committed appsettings values.
+        Environment.SetEnvironmentVariable("TASKS_DB_CONNECTION", _postgres.GetConnectionString());
+        Environment.SetEnvironmentVariable("ConnectionStrings__TasksDb", _postgres.GetConnectionString());
+        Environment.SetEnvironmentVariable("RABBITMQ_URL", _rabbit.GetConnectionString());
+        Environment.SetEnvironmentVariable("OUTBOX_QUERY_DELAY_SECONDS", "1");
+    }
 
     public new async Task DisposeAsync()
     {
