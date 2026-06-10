@@ -38,7 +38,17 @@ public static class DependencyInjection
                 o.DuplicateDetectionWindow = TimeSpan.FromMinutes(30);
             });
             x.AddConfigureEndpointsCallback((context, _, cfg) =>
-                cfg.UseEntityFrameworkOutbox<AnalyticsDbContext>(context));
+            {
+                // Concurrent first-events for one board/user race on the stats-row
+                // insert (duplicate PK). Retry lets the loser re-run against the now
+                // existing row; the inbox keeps each attempt exactly-once per message.
+                cfg.UseMessageRetry(r => r.Intervals(
+                    TimeSpan.FromMilliseconds(100),
+                    TimeSpan.FromMilliseconds(500),
+                    TimeSpan.FromSeconds(1),
+                    TimeSpan.FromSeconds(3)));
+                cfg.UseEntityFrameworkOutbox<AnalyticsDbContext>(context);
+            });
 
             x.AddConsumer<TaskCreatedEventConsumer>();
             x.AddConsumer<TaskAssignedEventConsumer>();
