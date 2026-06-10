@@ -5,6 +5,12 @@ services:
   gateway:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      # appsettings.Development.json targets localhost for `dotnet run`; inside
+      # compose the clusters must point at the service names again (env beats JSON).
+      ReverseProxy__Clusters__identity-cluster__Destinations__default__Address: http://identity-svc:8080
+      ReverseProxy__Clusters__tasks-cluster__Destinations__default__Address: http://tasks-svc:8080
+      ReverseProxy__Clusters__notifications-cluster__Destinations__default__Address: http://notifications-svc:8080
+      ReverseProxy__Clusters__analytics-cluster__Destinations__default__Address: http://analytics-svc:8080
 
   identity-svc:
     environment:
@@ -13,6 +19,9 @@ services:
   tasks-svc:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      # Local/E2E: scan for approaching deadlines every minute instead of hourly
+      # so the deadline-email flow is testable. Production keeps the 60-min default.
+      Deadline__ScanIntervalMinutes: "1"
 
   notifications-svc:
     environment:

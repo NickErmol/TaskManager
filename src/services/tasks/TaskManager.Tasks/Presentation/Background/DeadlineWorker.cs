@@ -2,12 +2,20 @@ using TaskManager.Tasks.Application.Services;
 
 namespace TaskManager.Tasks.Presentation.Background;
 
-/// <summary>Runs the deadline scan immediately on startup, then every hour (spec §4.3).</summary>
-public class DeadlineWorker(IServiceScopeFactory scopeFactory, ILogger<DeadlineWorker> logger) : BackgroundService
+/// <summary>
+/// Runs the deadline scan immediately on startup, then every hour (spec §4.3).
+/// The interval is configurable (Deadline:ScanIntervalMinutes) so E2E runs can
+/// exercise the deadline-email flow without waiting an hour; production keeps 60.
+/// </summary>
+public class DeadlineWorker(
+    IServiceScopeFactory scopeFactory,
+    IConfiguration configuration,
+    ILogger<DeadlineWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromHours(1));
+        var minutes = configuration.GetValue<double?>("Deadline:ScanIntervalMinutes") ?? 60;
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(minutes));
         do
         {
             try
