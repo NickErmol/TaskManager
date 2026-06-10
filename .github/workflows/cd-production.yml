@@ -39,6 +39,11 @@ jobs:
           - { name: analytics,     dockerfile: src/services/analytics/TaskManager.Analytics/Dockerfile }
     steps:
       - uses: actions/checkout@v4
+      # GHCR rejects mixed-case repository names; the owner (github.repository_owner)
+      # can contain capitals, so lowercase it here. Workflow-expression context has no
+      # lowercase function — do it in bash and override IMAGE_PREFIX for later steps.
+      - name: Lowercase image prefix
+        run: echo "IMAGE_PREFIX=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/smart-task-manager" >> "$GITHUB_ENV"
       # The gha cache backend (cache-to: type=gha) needs the buildx container
       # driver; the default docker driver can't export a cache and the build fails.
       - uses: docker/setup-buildx-action@v3
