@@ -5,9 +5,9 @@ namespace TaskManager.Notifications.Application;
 
 public class PreferencesService(IPreferencesStore store)
 {
-    public Task<NotificationPreferences> GetAsync(Guid userId, CancellationToken ct = default)
-        => throw new NotImplementedException();
+    public async Task<NotificationPreferences> GetAsync(Guid userId, CancellationToken ct = default)
+        => await store.GetAsync(userId, ct) ?? NotificationPreferences.Default;
 
     public Task UpdateAsync(Guid userId, NotificationPreferences preferences, CancellationToken ct = default)
-        => throw new NotImplementedException();
+        => store.SetAsync(userId, preferences, ct);
 }
