@@ -1,0 +1,96 @@
+name: CD Production
+
+on:
+  push:
+    branches: [main]
+
+env:
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/smart-task-manager
+
+jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: tag
+        run: echo "version=$(git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0')" >> $GITHUB_OUTPUT
+
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: get-version
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service:
+          - { name: gateway,       dockerfile: src/gateway/TaskManager.Gateway/Dockerfile }
+          - { name: identity,      dockerfile: src/services/identity/TaskManager.Identity/Dockerfile }
+          - { name: tasks,         dockerfile: src/services/tasks/TaskManager.Tasks/Dockerfile }
+          - { name: notifications, dockerfile: src/services/notifications/TaskManager.Notifications/Dockerfile }
+          - { name: analytics,     dockerfile: src/services/analytics/TaskManager.Analytics/Dockerfile }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.service.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}:latest
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}:${{ needs.get-version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-production-frontend:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - uses: actions/checkout@v4
+      # hashFiles() is not available in job-level `if` — gate on a step output instead.
+      - name: Check frontend exists
+        id: frontend
+        run: echo "exists=$([ -f frontend/task-manager-app/package.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        if: steps.frontend.outputs.exists == 'true'
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/task-manager-app/package-lock.json
+      - if: steps.frontend.outputs.exists == 'true'
+        run: cd frontend/task-manager-app && npm ci && npm run build -- --configuration production
+      - uses: vercel/action@v1
+        if: steps.frontend.outputs.exists == 'true'
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          working-directory: frontend/task-manager-app/dist/task-manager-app
+          vercel-args: '--prod'
+
+  deploy-production-backend:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: vars.FLY_DEPLOY_ENABLED == 'true'
+    strategy:
+      matrix:
+        app:
+          - smart-task-manager-gateway
+          - smart-task-manager-identity
+          - smart-task-manager-tasks
+          - smart-task-manager-notifications
+          - smart-task-manager-analytics
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --app ${{ matrix.app }} --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

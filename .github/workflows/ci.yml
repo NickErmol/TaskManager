@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+      - 'release/**'
+      - 'hotfix/**'
+      - develop
+  pull_request:
+    branches:
+      - develop
+      - main
+
+jobs:
+  test-dotnet:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - tests/TaskManager.Identity.Tests
+          - tests/TaskManager.Tasks.Tests
+          - tests/TaskManager.Notifications.Tests
+          - tests/TaskManager.Analytics.Tests
+          - tests/TaskManager.Gateway.Tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore
+        run: dotnet restore SmartTaskManager.sln
+      - name: Test
+        run: dotnet test ${{ matrix.project }} --configuration Release --no-restore
+
+  test-angular:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # hashFiles() is not available in job-level `if`, so gate on a step output instead.
+      # The frontend arrives in Step 2b; until then every later step is skipped.
+      - name: Check frontend exists
+        id: frontend
+        run: echo "exists=$([ -f frontend/task-manager-app/package.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        if: steps.frontend.outputs.exists == 'true'
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/task-manager-app/package-lock.json
+      - if: steps.frontend.outputs.exists == 'true'
+        run: cd frontend/task-manager-app && npm ci
+      - if: steps.frontend.outputs.exists == 'true'
+        run: cd frontend/task-manager-app && npm run lint
+      - if: steps.frontend.outputs.exists == 'true'
+        run: cd frontend/task-manager-app && npm run test:ci
+      - if: steps.frontend.outputs.exists == 'true'
+        run: cd frontend/task-manager-app && npm run build -- --configuration production

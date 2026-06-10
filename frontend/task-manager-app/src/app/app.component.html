@@ -1,0 +1,21 @@
+@if (auth.isAuthenticated()) {
+  <mat-toolbar color="primary" class="flex gap-4">
+    <a routerLink="/boards" class="font-medium text-inherit no-underline">Smart Task Manager</a>
+    <span class="flex-1"></span>
+    <a mat-button routerLink="/analytics">
+      <mat-icon>insights</mat-icon>
+      Analytics
+    </a>
+    <tm-notification-bell
+      [notifications]="notifications.notifications()"
+      (opened)="openNotification($event)"
+      (markAllRead)="notifications.markAllRead()"
+    />
+    @if (auth.user(); as user) {
+      <span class="text-sm">{{ user.displayName }}</span>
+    }
+    <button mat-button type="button" (click)="logout()">Sign out</button>
+  </mat-toolbar>
+}
+
+<router-outlet />
