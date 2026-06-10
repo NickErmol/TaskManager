@@ -94,8 +94,12 @@ public class MoveTaskCommandHandler(ITaskRepository tasks, IBoardRepository boar
             await publisher.PublishAsync(new TaskStatusChangedEvent(
                 task.Id, task.BoardId, task.Title, oldStatus.ToString(), newStatus.ToString(), cmd.UserId), ct);
             if (newStatus == TaskStatus.Done)
+            {
+                var memberIds = (await boards.GetByIdAsync(task.BoardId, ct))
+                    ?.Members.Select(m => m.UserId).ToList() ?? [];
                 await publisher.PublishAsync(new TaskCompletedEvent(
-                    task.Id, task.BoardId, task.Title, cmd.UserId, task.UpdatedAt), ct);
+                    task.Id, task.BoardId, task.Title, cmd.UserId, task.UpdatedAt, memberIds), ct);
+            }
         }
 
         try { await uow.SaveChangesAsync(ct); }

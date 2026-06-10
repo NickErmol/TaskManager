@@ -21,7 +21,8 @@ public class AddCommentCommandHandler(ITaskRepository tasks, IBoardRepository bo
             return Result.Fail(TaskAccess.EditorRequired);
 
         var comment = task.AddComment(cmd.UserId, cmd.Body);
-        await publisher.PublishAsync(new TaskCommentAddedEvent(task.Id, task.BoardId, comment.Id, cmd.UserId, cmd.Body), ct);
+        await publisher.PublishAsync(new TaskCommentAddedEvent(
+            task.Id, task.BoardId, comment.Id, cmd.UserId, cmd.Body, task.Title, task.AssignedTo), ct);
         await uow.SaveChangesAsync(ct);
         return Result.Ok(mapper.ToDto(comment));
     }
