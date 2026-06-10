@@ -121,8 +121,8 @@ Section 11 of the spec is the implementation playbook. Each step is one PR into 
 | 3 — Tasks service | `feature/tasks-service` | done (PR #7) |
 | 4 — Notifications service | `feature/notifications-service` | done (PR #9) |
 | 5 — Analytics service | `feature/analytics-service` | done (PR #11) |
-| 6 — Gateway (YARP routes + auth) | `feature/gateway-service` | next |
-| 7 — Remaining Angular features | `feature/angular-remaining-features` | pending |
+| 6 — Gateway (YARP routes + auth) | `feature/gateway-service` | done (PR #13) |
+| 7 — Remaining Angular features | `feature/angular-remaining-features` | next |
 | 8 — Playwright E2E tests | `feature/e2e-tests` | pending |
 
 The Angular auth shell (`core/auth/`, `core/http/`, `features/auth/`) ships in **Step 2**, not deferred to Step 7 — this is the "running app at each stage" decision. Step 7 fills in `features/boards/`, `features/tasks/`, `features/analytics/`, `shared/components/`.
