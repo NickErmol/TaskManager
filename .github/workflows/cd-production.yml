@@ -1,8 +1,14 @@
 name: CD Production
 
+# Triggers on the release tag, not on push to main. The Gitflow release process
+# (spec §10) merges release/* into main and THEN pushes `vX.Y.Z` — triggering on
+# main-push fired before the tag existed, so images were stamped v0.0.0 and a deploy
+# ran for every main commit. Tag-triggering stamps the real version and ties each
+# production deploy to an explicit, SemVer-tagged release (hotfixes tag too).
 on:
   push:
-    branches: [main]
+    tags:
+      - 'v*.*.*'
 
 env:
   IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/smart-task-manager
@@ -13,11 +19,9 @@ jobs:
     outputs:
       version: ${{ steps.tag.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - id: tag
-        run: echo "version=$(git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0')" >> $GITHUB_OUTPUT
+        # On a tag push, ref_name is the tag itself (e.g. v1.0.0).
+        run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
 
   build-and-push:
     runs-on: ubuntu-latest
@@ -35,6 +39,9 @@ jobs:
           - { name: analytics,     dockerfile: src/services/analytics/TaskManager.Analytics/Dockerfile }
     steps:
       - uses: actions/checkout@v4
+      # The gha cache backend (cache-to: type=gha) needs the buildx container
+      # driver; the default docker driver can't export a cache and the build fails.
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -54,6 +61,9 @@ jobs:
   deploy-production-frontend:
     runs-on: ubuntu-latest
     needs: build-and-push
+    # Skipped until the Vercel secrets are wired up — mirrors the FLY_DEPLOY_ENABLED
+    # gate on the backend job so CD stays green instead of failing on empty secrets.
+    if: vars.VERCEL_DEPLOY_ENABLED == 'true'
     steps:
       - uses: actions/checkout@v4
       # hashFiles() is not available in job-level `if` — gate on a step output instead.
