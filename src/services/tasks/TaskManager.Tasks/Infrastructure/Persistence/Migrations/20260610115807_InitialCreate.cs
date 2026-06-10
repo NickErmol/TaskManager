@@ -210,6 +210,12 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
                 {
                     table.PrimaryKey("PK_task_labels", x => new { x.TaskId, x.LabelId });
                     table.ForeignKey(
+                        name: "FK_task_labels_labels_LabelId",
+                        column: x => x.LabelId,
+                        principalTable: "labels",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
                         name: "FK_task_labels_tasks_TaskId",
                         column: x => x.TaskId,
                         principalTable: "tasks",
@@ -265,6 +271,11 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
                 column: "TaskId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_task_labels_LabelId",
+                table: "task_labels",
+                column: "LabelId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_tasks_AssignedTo",
                 table: "tasks",
                 column: "AssignedTo");
@@ -292,9 +303,6 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
                 name: "board_members");
 
             migrationBuilder.DropTable(
-                name: "labels");
-
-            migrationBuilder.DropTable(
                 name: "OutboxMessage");
 
             migrationBuilder.DropTable(
@@ -308,6 +316,9 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
 
             migrationBuilder.DropTable(
                 name: "OutboxState");
+
+            migrationBuilder.DropTable(
+                name: "labels");
 
             migrationBuilder.DropTable(
                 name: "tasks");

@@ -10,5 +10,10 @@ public class TaskLabelConfiguration : IEntityTypeConfiguration<TaskLabel>
     {
         builder.ToTable("task_labels");
         builder.HasKey(tl => new { tl.TaskId, tl.LabelId });
+
+        builder.HasOne<Label>()
+            .WithMany()
+            .HasForeignKey(tl => tl.LabelId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

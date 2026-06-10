@@ -365,6 +365,8 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
 
                     b.HasKey("TaskId", "LabelId");
 
+                    b.HasIndex("LabelId");
+
                     b.ToTable("task_labels", (string)null);
                 });
 
@@ -440,6 +442,12 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("TaskManager.Tasks.Domain.Entities.TaskLabel", b =>
                 {
+                    b.HasOne("TaskManager.Tasks.Domain.Entities.Label", null)
+                        .WithMany()
+                        .HasForeignKey("LabelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("TaskManager.Tasks.Domain.Entities.TaskItem", null)
                         .WithMany("Labels")
                         .HasForeignKey("TaskId")

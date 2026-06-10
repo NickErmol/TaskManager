@@ -12,7 +12,7 @@ using TaskManager.Tasks.Infrastructure.Persistence;
 namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(TasksDbContext))]
-    [Migration("20260610114021_InitialCreate")]
+    [Migration("20260610115807_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -368,6 +368,8 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
 
                     b.HasKey("TaskId", "LabelId");
 
+                    b.HasIndex("LabelId");
+
                     b.ToTable("task_labels", (string)null);
                 });
 
@@ -443,6 +445,12 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("TaskManager.Tasks.Domain.Entities.TaskLabel", b =>
                 {
+                    b.HasOne("TaskManager.Tasks.Domain.Entities.Label", null)
+                        .WithMany()
+                        .HasForeignKey("LabelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("TaskManager.Tasks.Domain.Entities.TaskItem", null)
                         .WithMany("Labels")
                         .HasForeignKey("TaskId")

@@ -97,7 +97,7 @@ public class TaskItem
     public void AddLabel(Guid labelId)
     {
         if (_labels.Any(l => l.LabelId == labelId)) return;
-        _labels.Add(new TaskLabel { TaskId = Id, LabelId = labelId });
+        _labels.Add(new TaskLabel(Id, labelId));
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
