@@ -10,6 +10,7 @@ public class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
     {
         builder.ToTable("tasks");
         builder.HasKey(t => t.Id);
+        builder.Property(t => t.Id).ValueGeneratedNever(); // factory-set
         builder.Property(t => t.Title).HasMaxLength(200).IsRequired();
         builder.Property(t => t.Description).HasMaxLength(2000);
         builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(20);

@@ -12,7 +12,7 @@ using TaskManager.Tasks.Infrastructure.Persistence;
 namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(TasksDbContext))]
-    [Migration("20260610115807_InitialCreate")]
+    [Migration("20260610123628_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -196,7 +196,6 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("TaskManager.Tasks.Domain.Entities.Board", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("CreatedAt")
@@ -245,7 +244,6 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("TaskManager.Tasks.Domain.Entities.Label", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("BoardId")
@@ -266,7 +264,6 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("TaskManager.Tasks.Domain.Entities.TaskComment", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("AuthorId")
@@ -296,7 +293,6 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("TaskManager.Tasks.Domain.Entities.TaskItem", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid?>("AssignedTo")

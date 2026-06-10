@@ -10,6 +10,7 @@ public class BoardConfiguration : IEntityTypeConfiguration<Board>
     {
         builder.ToTable("boards");
         builder.HasKey(b => b.Id);
+        builder.Property(b => b.Id).ValueGeneratedNever(); // factory-set
         builder.Property(b => b.Name).HasMaxLength(100).IsRequired();
         builder.Property(b => b.Description).HasMaxLength(500);
 
