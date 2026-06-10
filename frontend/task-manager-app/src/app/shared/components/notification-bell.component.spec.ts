@@ -36,8 +36,9 @@ describe('NotificationBellComponent', () => {
   it('hides the badge when nothing is unread', () => {
     setNotifications([makeNotification({ isRead: true })]);
 
-    const badge = fixture.nativeElement.querySelector('.mat-badge-content') as HTMLElement | null;
-    expect(badge?.classList.contains('mat-badge-hidden') ?? true).toBe(true);
+    // Material puts mat-badge-hidden on the badge host (the button), not the content span.
+    const bell = fixture.nativeElement.querySelector('[data-testid="bell-button"]') as HTMLElement;
+    expect(bell.classList.contains('mat-badge-hidden')).toBe(true);
   });
 
   it('lists only the 10 most recent notifications in the dropdown', () => {

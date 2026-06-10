@@ -52,6 +52,7 @@ describe('AnalyticsDashboardComponent', () => {
   });
 
   it('loads the completion trend of the first board into the chart series', () => {
+    fixture.detectChanges(); // re-render after the async trend load settled
     expect(analyticsApi.getCompletionTrend).toHaveBeenCalledWith(board.id);
 
     const series = fixture.componentInstance.trendSeries();

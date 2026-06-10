@@ -15,5 +15,16 @@ export const routes: Routes = [
     loadComponent: () => import('./features/boards/board-list.component').then((m) => m.BoardListComponent),
     canActivate: [authGuard],
   },
+  {
+    path: 'boards/:id',
+    loadComponent: () => import('./features/boards/board-detail.component').then((m) => m.BoardDetailComponent),
+    canActivate: [authGuard],
+  },
+  {
+    path: 'analytics',
+    loadComponent: () =>
+      import('./features/analytics/analytics-dashboard.component').then((m) => m.AnalyticsDashboardComponent),
+    canActivate: [authGuard],
+  },
   { path: '**', redirectTo: 'boards' },
 ];
