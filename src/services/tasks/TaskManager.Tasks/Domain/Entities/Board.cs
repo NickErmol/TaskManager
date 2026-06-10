@@ -73,4 +73,22 @@ public class Board
 
     public BoardRole? GetRole(Guid userId)
         => _members.FirstOrDefault(m => m.UserId == userId)?.Role;
+
+    public Result<Label> AddLabel(string name, string colorHex)
+    {
+        if (_labels.Any(l => l.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            return Result.Fail("conflict: a label with this name already exists");
+        var label = Label.Create(Id, name, colorHex);
+        if (label.IsFailed) return label;
+        _labels.Add(label.Value);
+        return label;
+    }
+
+    public Result RemoveLabel(Guid labelId)
+    {
+        var label = _labels.FirstOrDefault(l => l.Id == labelId);
+        if (label is null) return Result.Fail("not found: label");
+        _labels.Remove(label);
+        return Result.Ok();
+    }
 }

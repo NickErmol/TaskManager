@@ -10,7 +10,8 @@ public record TaskFilterParams(
     TaskStatus? Status = null,
     TaskPriority? Priority = null,
     DateTimeOffset? DueBefore = null,
-    int Limit = 200);
+    int Limit = 200,
+    Guid? MemberUserId = null); // restricts to boards where this user is a member (used when BoardId is absent)
 
 public interface ITaskRepository
 {
@@ -24,4 +25,7 @@ public interface ITaskRepository
 
     void Add(TaskItem task);
     void Remove(TaskItem task);
+
+    /// <summary>Assigned, non-Done tasks with a due date inside (now, now+window]. Used by the deadline scanner.</summary>
+    Task<List<TaskItem>> GetDueWithinAsync(TimeSpan window, CancellationToken ct = default);
 }
