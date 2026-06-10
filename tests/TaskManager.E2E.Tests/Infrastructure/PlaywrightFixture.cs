@@ -23,6 +23,42 @@ public class PlaywrightFixture : IAsyncLifetime
 
         _playwright = await Playwright.CreateAsync();
         Browser = await _playwright.Chromium.LaunchAsync(new() { Headless = !E2eConfig.Headed });
+
+        await WarmUpFrontendAsync();
+    }
+
+    /// <summary>
+    /// ng serve (Vite) re-optimizes dependencies the first time each lazy route is
+    /// visited and force-reloads the page, which breaks mid-flow interactions.
+    /// Walk every route once with a throwaway user so tests hit a warm dev server.
+    /// (Irrelevant when E2E targets a production build — then this is just a smoke pass.)
+    /// </summary>
+    private async Task WarmUpFrontendAsync()
+    {
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            var page = await NewPageAsync();
+            try
+            {
+                await Flows.RegisterAsync(page);
+                var board = $"Warmup {Guid.NewGuid():N}";
+                await Flows.CreateBoardAsync(page, board);
+                await Flows.OpenBoardAsync(page, board);
+                await Flows.CreateTaskAsync(page, "Warmup task");
+                await page.GotoAsync("/analytics");
+                await page.WaitForSelectorAsync("[data-testid='stat-created']");
+                return;
+            }
+            catch when (attempt < 3)
+            {
+                // dev-server reload interrupted the pass — the deps it optimized stay
+                // optimized, so the next attempt gets further
+            }
+            finally
+            {
+                await page.Context.DisposeAsync();
+            }
+        }
     }
 
     public async Task DisposeAsync()

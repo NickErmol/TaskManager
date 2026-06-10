@@ -44,3 +44,6 @@ desktop.ini
 # Logs
 logs/
 *.log
+
+# Claude preview launch config (developer-local)
+.claude/launch.json

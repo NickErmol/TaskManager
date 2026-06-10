@@ -23,7 +23,16 @@ public static class Flows
         await page.Locator("input[formcontrolname='displayName']").FillAsync(user.DisplayName);
         await page.Locator("input[formcontrolname='password']").FillAsync(user.Password);
         await page.Locator("button[type='submit']").ClickAsync();
-        await page.WaitForURLAsync("**/boards");
+        try
+        {
+            await page.WaitForURLAsync("**/boards");
+        }
+        catch (TimeoutException e)
+        {
+            var body = await page.Locator("body").InnerTextAsync();
+            throw new InvalidOperationException(
+                $"register did not land on /boards; url={page.Url}; body starts: {body[..Math.Min(300, body.Length)]}", e);
+        }
         return user;
     }
 
@@ -81,20 +90,53 @@ public static class Flows
     public static ILocator Column(IPage page, string label) =>
         page.Locator("[data-testid='board-column']", new() { Has = page.Locator($"h2:has-text('{label}')") });
 
-    /// <summary>Mouse-based drag (CDK drag-drop ignores HTML5 drag events).</summary>
+    /// <summary>
+    /// Mouse-based drag (CDK drag-drop ignores synthetic HTML5 drag events). CDK is
+    /// sensitive to gesture timing, so retry until the card lands in the target column.
+    /// </summary>
     public static async Task DragTaskToColumnAsync(IPage page, string title, string columnLabel)
+    {
+        var targetCard = Column(page, columnLabel).Locator("[data-testid='task-card']", new() { HasText = title });
+
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            await DragOnceAsync(page, title, columnLabel);
+            try
+            {
+                await targetCard.WaitForAsync(new() { Timeout = 4000 });
+                return;
+            }
+            catch (TimeoutException) when (attempt < 3)
+            {
+                // gesture didn't register with CDK — let the board settle and retry
+                await page.WaitForTimeoutAsync(500);
+            }
+        }
+    }
+
+    private static async Task DragOnceAsync(IPage page, string title, string columnLabel)
     {
         var card = TaskCard(page, title);
         var dropArea = Column(page, columnLabel).Locator(".cdk-drop-list");
+        await dropArea.ScrollIntoViewIfNeededAsync();
 
         var from = await card.BoundingBoxAsync() ?? throw new InvalidOperationException("task card not visible");
         var to = await dropArea.BoundingBoxAsync() ?? throw new InvalidOperationException("drop area not visible");
 
-        await page.Mouse.MoveAsync(from.X + from.Width / 2, from.Y + from.Height / 2);
+        var startX = from.X + from.Width / 2;
+        var startY = from.Y + from.Height / 2;
+        var endX = to.X + to.Width / 2;
+        var endY = to.Y + Math.Min(to.Height / 2, 50);
+
+        await page.Mouse.MoveAsync(startX, startY);
         await page.Mouse.DownAsync();
-        // small initial move so CDK starts the drag before the long travel
-        await page.Mouse.MoveAsync(from.X + from.Width / 2 + 10, from.Y + from.Height / 2 + 10, new() { Steps = 5 });
-        await page.Mouse.MoveAsync(to.X + to.Width / 2, to.Y + Math.Min(to.Height / 2, 60), new() { Steps = 20 });
+        // exceed CDK's drag-start threshold before travelling
+        await page.Mouse.MoveAsync(startX + 8, startY + 8, new() { Steps = 6 });
+        await page.WaitForTimeoutAsync(50);
+        await page.Mouse.MoveAsync(endX, endY, new() { Steps = 25 });
+        // settle over the target so CDK registers the hovered drop list
+        await page.Mouse.MoveAsync(endX, endY, new() { Steps = 5 });
+        await page.WaitForTimeoutAsync(50);
         await page.Mouse.UpAsync();
     }
 

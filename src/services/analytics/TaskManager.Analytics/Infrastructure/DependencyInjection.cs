@@ -1,5 +1,6 @@
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using TaskManager.Contracts.Events;
 using TaskManager.Analytics.Application;
 using TaskManager.Analytics.Domain.Interfaces;
 using TaskManager.Analytics.Infrastructure.Messaging;
@@ -37,19 +38,6 @@ public static class DependencyInjection
                 o.UsePostgres();
                 o.DuplicateDetectionWindow = TimeSpan.FromMinutes(30);
             });
-            x.AddConfigureEndpointsCallback((context, _, cfg) =>
-            {
-                // Concurrent first-events for one board/user race on the stats-row
-                // insert (duplicate PK). Retry lets the loser re-run against the now
-                // existing row; the inbox keeps each attempt exactly-once per message.
-                cfg.UseMessageRetry(r => r.Intervals(
-                    TimeSpan.FromMilliseconds(100),
-                    TimeSpan.FromMilliseconds(500),
-                    TimeSpan.FromSeconds(1),
-                    TimeSpan.FromSeconds(3)));
-                cfg.UseEntityFrameworkOutbox<AnalyticsDbContext>(context);
-            });
-
             x.AddConsumer<TaskCreatedEventConsumer>();
             x.AddConsumer<TaskAssignedEventConsumer>();
             x.AddConsumer<TaskStatusChangedEventConsumer>();
@@ -59,10 +47,59 @@ public static class DependencyInjection
             x.UsingRabbitMq((context, cfg) =>
             {
                 cfg.Host(new Uri(rabbitUrl));
-                cfg.ConfigureEndpoints(context);
+
+                // Tasks publishes to the topic exchange "task-manager" with one routing
+                // key per event (spec §4.3). Convention-based ConfigureEndpoints binds
+                // queues to per-type exchanges instead, so every message would be
+                // dropped as unroutable. Mirror the publisher topology and bind each
+                // consumer queue explicitly.
+                MapTaskManagerEvent<TaskCreatedEvent>(cfg, "task.created");
+                MapTaskManagerEvent<TaskAssignedEvent>(cfg, "task.assigned");
+                MapTaskManagerEvent<TaskStatusChangedEvent>(cfg, "task.status-changed");
+                MapTaskManagerEvent<TaskCompletedEvent>(cfg, "task.completed");
+                MapTaskManagerEvent<TaskCommentAddedEvent>(cfg, "task.comment-added");
+
+                ReceiveFromTopic<TaskCreatedEventConsumer>(context, cfg, "analytics-task-created", "task.created");
+                ReceiveFromTopic<TaskAssignedEventConsumer>(context, cfg, "analytics-task-assigned", "task.assigned");
+                ReceiveFromTopic<TaskStatusChangedEventConsumer>(context, cfg, "analytics-task-status-changed", "task.status-changed");
+                ReceiveFromTopic<TaskCompletedEventConsumer>(context, cfg, "analytics-task-completed", "task.completed");
+                ReceiveFromTopic<TaskCommentAddedEventConsumer>(context, cfg, "analytics-task-comment-added", "task.comment-added");
             });
         });
 
         return services;
+    }
+
+    /// <summary>Publisher-side mapping, identical to the Tasks service (spec §4.3).</summary>
+    private static void MapTaskManagerEvent<T>(IRabbitMqBusFactoryConfigurator cfg, string routingKey) where T : class
+    {
+        cfg.Message<T>(m => m.SetEntityName("task-manager"));
+        cfg.Publish<T>(p => p.ExchangeType = "topic");
+        cfg.Send<T>(s => s.UseRoutingKeyFormatter(_ => routingKey));
+    }
+
+    private static void ReceiveFromTopic<TConsumer>(
+        IBusRegistrationContext context, IRabbitMqBusFactoryConfigurator cfg, string queue, string routingKey)
+        where TConsumer : class, IConsumer
+    {
+        cfg.ReceiveEndpoint(queue, endpoint =>
+        {
+            endpoint.ConfigureConsumeTopology = false;
+            endpoint.Bind("task-manager", bind =>
+            {
+                bind.ExchangeType = "topic";
+                bind.RoutingKey = routingKey;
+            });
+            // Concurrent first-events for one board/user race on the stats-row
+            // insert (duplicate PK). Retry lets the loser re-run against the now
+            // existing row; the inbox keeps each attempt exactly-once per message.
+            endpoint.UseMessageRetry(r => r.Intervals(
+                TimeSpan.FromMilliseconds(100),
+                TimeSpan.FromMilliseconds(500),
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(3)));
+            endpoint.UseEntityFrameworkOutbox<AnalyticsDbContext>(context);
+            endpoint.ConfigureConsumer<TConsumer>(context);
+        });
     }
 }

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit } from '@angular/core';
-import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -29,11 +29,12 @@ import { EmptyStateComponent } from '../../shared/components';
       <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
         <h1 class="text-2xl font-semibold text-slate-800">Your boards</h1>
 
-        <form class="flex items-center gap-2" (ngSubmit)="create()">
+        <!-- [formGroup] is required for (ngSubmit) to fire (and prevent native submit) -->
+        <form class="flex items-center gap-2" [formGroup]="createForm" (ngSubmit)="create()">
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <input matInput placeholder="New board name" [formControl]="boardName" />
+            <input matInput placeholder="New board name" formControlName="name" />
           </mat-form-field>
-          <button mat-flat-button color="primary" type="submit" [disabled]="boardName.invalid">
+          <button mat-flat-button color="primary" type="submit" [disabled]="createForm.invalid">
             <mat-icon>add</mat-icon>
             Create
           </button>
@@ -75,17 +76,19 @@ import { EmptyStateComponent } from '../../shared/components';
 export class BoardListComponent implements OnInit {
   protected readonly store = inject(BoardsStore);
 
-  readonly boardName = new FormControl('', { nonNullable: true, validators: [Validators.required] });
+  readonly createForm = new FormGroup({
+    name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+  });
 
   ngOnInit(): void {
     void this.store.loadBoards();
   }
 
   protected create(): void {
-    if (this.boardName.invalid) return;
-    const name = this.boardName.value.trim();
+    if (this.createForm.invalid) return;
+    const name = this.createForm.controls.name.value.trim();
     if (name.length === 0) return;
-    this.boardName.reset();
+    this.createForm.reset();
     void this.store.createBoard({ name });
   }
 }

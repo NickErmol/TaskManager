@@ -15,7 +15,7 @@ public class CorsTests(GatewayWebAppFactory factory) : IClassFixture<GatewayWebA
         var request = new HttpRequestMessage(HttpMethod.Options, "/api/boards");
         request.Headers.Add("Origin", Origin);
         request.Headers.Add("Access-Control-Request-Method", "POST");
-        request.Headers.Add("Access-Control-Request-Headers", "authorization,content-type,if-match");
+        request.Headers.Add("Access-Control-Request-Headers", "authorization,content-type,if-match,x-requested-with,x-signalr-user-agent");
 
         var response = await client.SendAsync(request);
 
@@ -25,7 +25,9 @@ public class CorsTests(GatewayWebAppFactory factory) : IClassFixture<GatewayWebA
         response.Headers.GetValues("Access-Control-Allow-Credentials").Should().ContainSingle()
             .Which.Should().Be("true");
         var allowedHeaders = string.Join(",", response.Headers.GetValues("Access-Control-Allow-Headers"));
-        allowedHeaders.ToLowerInvariant().Should().ContainAll("authorization", "content-type", "if-match");
+        // x-requested-with / x-signalr-user-agent: sent by the SignalR browser client on /hubs negotiate
+        allowedHeaders.ToLowerInvariant().Should().ContainAll(
+            "authorization", "content-type", "if-match", "x-requested-with", "x-signalr-user-agent");
         var allowedMethods = string.Join(",", response.Headers.GetValues("Access-Control-Allow-Methods"));
         allowedMethods.Should().ContainAll("GET", "POST", "PUT", "DELETE");
     }

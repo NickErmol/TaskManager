@@ -20,15 +20,26 @@ public class AnalyticsFlowTests(PlaywrightFixture fixture)
         await Flows.CreateTaskAsync(page, "Finish me");
         await Flows.DragTaskToColumnAsync(page, "Finish me", "Done");
 
-        // analytics is an async event projection — poll the dashboard until it catches up
-        var statCreated = page.Locator("[data-testid='stat-created']");
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(45);
+        // The move is an optimistic async POST. Wait for the card to land in Done
+        // (server-confirmed) before navigating away — otherwise leaving the page
+        // cancels the in-flight request and the TaskCompletedEvent never fires.
+        await Assertions.Expect(Flows.Column(page, "Done").Locator("[data-testid='task-card']"))
+            .ToContainTextAsync("Finish me");
+        await page.ReloadAsync();
+        await Assertions.Expect(Flows.Column(page, "Done").Locator("[data-testid='task-card']"))
+            .ToContainTextAsync("Finish me");
+
+        // Analytics is an async event projection. Completion is the last value to
+        // land (created → moved → TaskCompletedEvent → projection), so poll on it;
+        // once it shows, created is necessarily already there.
+        var statCompleted = page.Locator("[data-testid='stat-completed']");
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(60);
         while (true)
         {
             await page.GotoAsync("/analytics");
             try
             {
-                await Assertions.Expect(statCreated).ToContainTextAsync("2", new() { Timeout = 3000 });
+                await Assertions.Expect(statCompleted).ToContainTextAsync("1", new() { Timeout = 3000 });
                 break;
             }
             catch (PlaywrightException) when (DateTimeOffset.UtcNow < deadline)
@@ -37,7 +48,7 @@ public class AnalyticsFlowTests(PlaywrightFixture fixture)
             }
         }
 
-        await Assertions.Expect(page.Locator("[data-testid='stat-completed']")).ToContainTextAsync("1");
+        await Assertions.Expect(page.Locator("[data-testid='stat-created']")).ToContainTextAsync("2");
         await Assertions.Expect(page.Locator("[data-testid='trend-chart']")).ToBeVisibleAsync();
         await Assertions.Expect(page.Locator("[data-testid='activity-item']").First).ToBeVisibleAsync();
     }
