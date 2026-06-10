@@ -24,6 +24,8 @@ import { TruncatePipe } from '../pipes';
         <span class="text-sm font-medium text-slate-800">{{ task().title }}</span>
         @if (assignee(); as user) {
           <tm-avatar [name]="user.displayName" [avatarUrl]="user.avatarUrl" />
+        } @else if (task().assignedTo !== null) {
+          <mat-icon data-testid="assignee-indicator" class="text-slate-400" title="Assigned">person</mat-icon>
         }
       </div>
 
