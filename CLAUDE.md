@@ -117,10 +117,10 @@ Section 11 of the spec is the implementation playbook. Each step is one PR into 
 | Step | Branch | Status |
 |---|---|---|
 | 1 — Scaffold solution + infra | `feature/scaffold-solution` | done (PR #4) |
-| 2 — Identity service + Angular auth shell | `feature/identity-service` | next |
-| 3 — Tasks service | `feature/tasks-service` | pending |
-| 4 — Notifications service | `feature/notifications-service` | pending |
-| 5 — Analytics service | `feature/analytics-service` | pending |
+| 2 — Identity service + Angular auth shell | `feature/identity-service` + `feature/angular-auth-shell` | done (PRs #6, #8) |
+| 3 — Tasks service | `feature/tasks-service` | done (PR #7) |
+| 4 — Notifications service | `feature/notifications-service` | done (PR #9) |
+| 5 — Analytics service | `feature/analytics-service` | next |
 | 6 — Gateway (YARP routes + auth) | `feature/gateway-service` | pending |
 | 7 — Remaining Angular features | `feature/angular-remaining-features` | pending |
 | 8 — Playwright E2E tests | `feature/e2e-tests` | pending |
@@ -142,7 +142,7 @@ src/
   shared/TaskManager.Contracts/Events/   integration event records only — no domain logic, no EF, no HTTP models
 tests/TaskManager.<svc>.Tests/           xUnit + FluentAssertions + NSubstitute + Microsoft.AspNetCore.Mvc.Testing + Bogus + NetArchTest.Rules + service-specific Testcontainers
 tests/TaskManager.E2E.Tests/             Microsoft.Playwright, no service refs
-frontend/task-manager-app/               Angular 18 (created in Step 2b, not yet in repo)
+frontend/task-manager-app/               Angular 18 + Jest (auth shell from Step 2b; remaining features in Step 7)
 docker-compose.yml + docker-compose.override.yml
 .github/workflows/{ci,cd-staging,cd-production}.yml
 SmartTaskManager.sln
