@@ -120,8 +120,8 @@ Section 11 of the spec is the implementation playbook. Each step is one PR into 
 | 2 — Identity service + Angular auth shell | `feature/identity-service` + `feature/angular-auth-shell` | done (PRs #6, #8) |
 | 3 — Tasks service | `feature/tasks-service` | done (PR #7) |
 | 4 — Notifications service | `feature/notifications-service` | done (PR #9) |
-| 5 — Analytics service | `feature/analytics-service` | next |
-| 6 — Gateway (YARP routes + auth) | `feature/gateway-service` | pending |
+| 5 — Analytics service | `feature/analytics-service` | done (PR #11) |
+| 6 — Gateway (YARP routes + auth) | `feature/gateway-service` | next |
 | 7 — Remaining Angular features | `feature/angular-remaining-features` | pending |
 | 8 — Playwright E2E tests | `feature/e2e-tests` | pending |
 
