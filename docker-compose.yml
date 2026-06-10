@@ -162,6 +162,7 @@ services:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
       SMTP_HOST: mailhog
       SMTP_PORT: 1025
+      IDENTITY_URL: http://identity-svc:8080
     ports:
       - "5003:8080"
     depends_on:
