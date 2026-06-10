@@ -24,6 +24,13 @@ public static class HttpHelpers
     public static string Etag(this HttpResponseMessage response)
         => response.Headers.ETag!.Tag; // includes surrounding quotes — pass back to If-Match as-is
 
+    /// <summary>Status assertion that surfaces the response body on failure — invaluable for CI-only failures.</summary>
+    public static async Task ShouldBeAsync(this HttpResponseMessage response, System.Net.HttpStatusCode expected)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(expected, "response body: {0}", body);
+    }
+
     /// <summary>Board with one Owner, one Editor, one Viewer — created through the API.</summary>
     public static async Task<(Guid BoardId, Guid Owner, Guid Editor, Guid Viewer)> SeedBoardAsync(this TasksWebAppFactory factory)
     {

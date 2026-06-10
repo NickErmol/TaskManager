@@ -168,7 +168,7 @@ public class TaskEndpointsTests(TasksWebAppFactory factory)
         var client = factory.As(editor);
 
         var added = await client.PostAsJsonAsync($"/api/tasks/{task.Id}/comments", new { Body = "first" });
-        added.StatusCode.Should().Be(HttpStatusCode.OK);
+        await added.ShouldBeAsync(HttpStatusCode.OK);
         var comment = (await added.Content.ReadFromJsonAsync<CommentDto>())!;
         (await factory.Harness.Published.Any<TaskCommentAddedEvent>(x => x.Context.Message.CommentId == comment.Id))
             .Should().BeTrue();
@@ -193,7 +193,7 @@ public class TaskEndpointsTests(TasksWebAppFactory factory)
         var client = factory.As(editor);
 
         var add = await client.PostAsync($"/api/tasks/{task.Id}/labels/{label.Id}", null);
-        add.StatusCode.Should().Be(HttpStatusCode.OK);
+        await add.ShouldBeAsync(HttpStatusCode.OK);
         (await add.Content.ReadFromJsonAsync<TaskDto>())!.LabelIds.Should().Contain(label.Id);
 
         var remove = await client.DeleteAsync($"/api/tasks/{task.Id}/labels/{label.Id}");

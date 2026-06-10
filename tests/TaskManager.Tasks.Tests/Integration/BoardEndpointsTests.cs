@@ -133,7 +133,7 @@ public class BoardEndpointsTests(TasksWebAppFactory factory)
 
         var created = await factory.As(owner)
             .PostAsJsonAsync($"/api/boards/{boardId}/labels", new { Name = "bug", Color = "#ff0000" });
-        created.StatusCode.Should().Be(HttpStatusCode.OK);
+        await created.ShouldBeAsync(HttpStatusCode.OK);
         var label = (await created.Content.ReadFromJsonAsync<LabelDto>())!;
 
         var list = await factory.As(editor).GetFromJsonAsync<List<LabelDto>>($"/api/boards/{boardId}/labels");

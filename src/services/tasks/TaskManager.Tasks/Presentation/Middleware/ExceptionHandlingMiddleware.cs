@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace TaskManager.Tasks.Presentation.Middleware;
 
 /// <summary>Genuine bugs only — expected domain failures travel as Result (never thrown).</summary>
-public class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger)
+public class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger, IHostEnvironment env)
 {
     public async Task InvokeAsync(HttpContext context)
     {
@@ -19,6 +19,8 @@ public class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Exception
             {
                 Status = StatusCodes.Status500InternalServerError,
                 Title = "An unexpected error occurred.",
+                // Exception details never leak outside Development.
+                Detail = env.IsDevelopment() ? ex.ToString() : null,
             });
         }
     }
