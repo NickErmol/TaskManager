@@ -55,6 +55,11 @@ public class TasksWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
         await base.DisposeAsync();
         await _postgres.DisposeAsync();
         await _rabbit.DisposeAsync();
+        // Process-wide state — clear so no later fixture inherits dead container endpoints.
+        Environment.SetEnvironmentVariable("TASKS_DB_CONNECTION", null);
+        Environment.SetEnvironmentVariable("ConnectionStrings__TasksDb", null);
+        Environment.SetEnvironmentVariable("RABBITMQ_URL", null);
+        Environment.SetEnvironmentVariable("OUTBOX_QUERY_DELAY_SECONDS", null);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

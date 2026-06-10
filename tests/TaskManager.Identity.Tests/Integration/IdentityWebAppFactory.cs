@@ -36,8 +36,15 @@ public class IdentityWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
 
     public new async Task DisposeAsync()
     {
-        await _postgres.DisposeAsync();
+        // Web host first — it may still talk to the container during teardown.
         await base.DisposeAsync();
+        await _postgres.DisposeAsync();
+        // Process-wide state — clear so no later fixture inherits dead container endpoints.
+        Environment.SetEnvironmentVariable("IDENTITY_DB_CONNECTION", null);
+        Environment.SetEnvironmentVariable("ConnectionStrings__IdentityDb", null);
+        Environment.SetEnvironmentVariable("JWT_SECRET", null);
+        Environment.SetEnvironmentVariable("Jwt__Issuer", null);
+        Environment.SetEnvironmentVariable("Jwt__Audience", null);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
