@@ -26,6 +26,6 @@ public interface ITaskRepository
     void Add(TaskItem task);
     void Remove(TaskItem task);
 
-    /// <summary>Assigned, non-Done tasks with a due date inside (now, now+window]. Used by the deadline scanner.</summary>
+    /// <summary>Tasks where AssignedTo is not null, Status != Done, and DueDate is in (now, now+window]. Used by the deadline scanner.</summary>
     Task<List<TaskItem>> GetDueWithinAsync(TimeSpan window, CancellationToken ct = default);
 }

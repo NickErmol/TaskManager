@@ -76,6 +76,7 @@ public class Board
 
     public Result<Label> AddLabel(string name, string colorHex)
     {
+        name = name.Trim();
         if (_labels.Any(l => l.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
             return Result.Fail("conflict: a label with this name already exists");
         var label = Label.Create(Id, name, colorHex);
@@ -84,11 +85,13 @@ public class Board
         return label;
     }
 
+    /// <summary>Removes the label from this board and removes its reference from every loaded task in the aggregate.</summary>
     public Result RemoveLabel(Guid labelId)
     {
         var label = _labels.FirstOrDefault(l => l.Id == labelId);
         if (label is null) return Result.Fail("not found: label");
         _labels.Remove(label);
+        foreach (var task in _tasks) task.RemoveLabel(labelId);
         return Result.Ok();
     }
 }
