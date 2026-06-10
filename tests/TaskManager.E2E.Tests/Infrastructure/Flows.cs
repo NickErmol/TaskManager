@@ -98,15 +98,15 @@ public static class Flows
     {
         var targetCard = Column(page, columnLabel).Locator("[data-testid='task-card']", new() { HasText = title });
 
-        for (var attempt = 1; attempt <= 3; attempt++)
+        for (var attempt = 1; attempt <= 5; attempt++)
         {
             await DragOnceAsync(page, title, columnLabel);
             try
             {
-                await targetCard.WaitForAsync(new() { Timeout = 4000 });
+                await targetCard.WaitForAsync(new() { Timeout = 5000 });
                 return;
             }
-            catch (TimeoutException) when (attempt < 3)
+            catch (TimeoutException) when (attempt < 5)
             {
                 // gesture didn't register with CDK — let the board settle and retry
                 await page.WaitForTimeoutAsync(500);
@@ -132,11 +132,23 @@ public static class Flows
         await page.Mouse.DownAsync();
         // exceed CDK's drag-start threshold before travelling
         await page.Mouse.MoveAsync(startX + 8, startY + 8, new() { Steps = 6 });
-        await page.WaitForTimeoutAsync(50);
-        await page.Mouse.MoveAsync(endX, endY, new() { Steps = 25 });
+        await page.WaitForTimeoutAsync(100);
+
+        // Travel to the target in paused waypoints. CDK samples the pointer on
+        // requestAnimationFrame; a single fast sweep can outrun its drop-list hover
+        // detection on a slow/headless CI runner, so pause after each hop to let a
+        // frame land and CDK register the hovered list.
+        const int hops = 5;
+        for (var h = 1; h <= hops; h++)
+        {
+            var x = startX + (endX - startX) * h / hops;
+            var y = startY + (endY - startY) * h / hops;
+            await page.Mouse.MoveAsync(x, y, new() { Steps = 8 });
+            await page.WaitForTimeoutAsync(60);
+        }
         // settle over the target so CDK registers the hovered drop list
         await page.Mouse.MoveAsync(endX, endY, new() { Steps = 5 });
-        await page.WaitForTimeoutAsync(50);
+        await page.WaitForTimeoutAsync(150);
         await page.Mouse.UpAsync();
     }
 
