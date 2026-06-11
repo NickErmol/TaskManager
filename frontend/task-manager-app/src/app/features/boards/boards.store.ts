@@ -12,12 +12,14 @@ import {
 } from '../../core/models';
 import { BoardsApiService } from '../../core/http/boards-api.service';
 import { TasksApiService } from '../../core/http/tasks-api.service';
+import { BoardFilter, EMPTY_FILTER } from './board-filter';
 
 export interface BoardsState {
   boards: BoardDto[];
   currentBoard: BoardDetailDto | null;
   isLoading: boolean;
   error: string | null;
+  filter: BoardFilter;
 }
 
 const initialState: BoardsState = {
@@ -25,6 +27,7 @@ const initialState: BoardsState = {
   currentBoard: null,
   isLoading: false,
   error: null,
+  filter: EMPTY_FILTER,
 };
 
 /** Pure optimistic move: lift the task out of its column and drop it into the target one. */
@@ -121,6 +124,14 @@ export const BoardsStore = signalStore(
             { duration: 4000 },
           );
         }
+      },
+
+      setFilter(patch: Partial<BoardFilter>): void {
+        patchState(store, { filter: { ...store.filter(), ...patch } });
+      },
+
+      clearFilter(): void {
+        patchState(store, { filter: EMPTY_FILTER });
       },
     };
   }),
