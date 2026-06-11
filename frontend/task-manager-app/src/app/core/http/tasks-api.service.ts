@@ -78,4 +78,18 @@ export class TasksApiService {
   deleteChecklistItem(id: string, itemId: string): Observable<TaskDto> {
     return this.http.delete<TaskDto>(apiUrl(`/api/tasks/${id}/checklist/${itemId}`));
   }
+
+  uploadAttachment(id: string, file: File): Observable<TaskDto> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return this.http.post<TaskDto>(apiUrl(`/api/tasks/${id}/attachments`), form);
+  }
+
+  deleteAttachment(id: string, attachmentId: string): Observable<TaskDto> {
+    return this.http.delete<TaskDto>(apiUrl(`/api/tasks/${id}/attachments/${attachmentId}`));
+  }
+
+  downloadAttachment(id: string, attachmentId: string): Observable<Blob> {
+    return this.http.get(apiUrl(`/api/tasks/${id}/attachments/${attachmentId}/content`), { responseType: 'blob' });
+  }
 }

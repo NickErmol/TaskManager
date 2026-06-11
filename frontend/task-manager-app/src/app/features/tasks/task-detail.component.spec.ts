@@ -89,4 +89,31 @@ describe('TaskDetailComponent', () => {
     expect(saveReq.request.headers.get('If-Match')).toBe('"2"');
     saveReq.flush({ ...taskWithLabel, rowVersion: 3 });
   });
+
+  it('uploadFile() posts multipart and sets the attachments signal from the returned task', async () => {
+    const attachment = {
+      id: 'att-1',
+      fileName: 'doc.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: 2048,
+      uploadedById: 'user-1',
+      uploadedAt: '2026-06-11T10:00:00Z',
+    };
+    const taskWithAttachment = { ...task, attachments: [attachment] };
+
+    const file = new File(['content'], 'doc.pdf', { type: 'application/pdf' });
+    const fakeInput = { files: [file], value: '' } as unknown as HTMLInputElement;
+    const event = { target: fakeInput } as unknown as Event;
+
+    const uploadPromise = fixture.componentInstance.uploadFile(event);
+
+    const req = http.expectOne(apiUrl(`/api/tasks/${task.id}/attachments`));
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body instanceof FormData).toBe(true);
+    req.flush(taskWithAttachment);
+    await uploadPromise;
+
+    expect(fixture.componentInstance.attachments()).toEqual([attachment]);
+    expect(fixture.componentInstance.attachmentsChanged()).toBe(true);
+  });
 });
