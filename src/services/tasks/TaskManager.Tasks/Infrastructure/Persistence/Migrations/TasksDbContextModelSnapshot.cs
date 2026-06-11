@@ -238,6 +238,35 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
                     b.ToTable("board_members", (string)null);
                 });
 
+            modelBuilder.Entity("TaskManager.Tasks.Domain.Entities.ChecklistItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDone")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TaskItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TaskItemId");
+
+                    b.ToTable("checklist_items", (string)null);
+                });
+
             modelBuilder.Entity("TaskManager.Tasks.Domain.Entities.Label", b =>
                 {
                     b.Property<Guid>("Id")
@@ -387,6 +416,15 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("TaskManager.Tasks.Domain.Entities.ChecklistItem", b =>
+                {
+                    b.HasOne("TaskManager.Tasks.Domain.Entities.TaskItem", null)
+                        .WithMany("Checklist")
+                        .HasForeignKey("TaskItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("TaskManager.Tasks.Domain.Entities.Label", b =>
                 {
                     b.HasOne("TaskManager.Tasks.Domain.Entities.Board", null)
@@ -462,6 +500,8 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("TaskManager.Tasks.Domain.Entities.TaskItem", b =>
                 {
+                    b.Navigation("Checklist");
+
                     b.Navigation("Comments");
 
                     b.Navigation("Labels");

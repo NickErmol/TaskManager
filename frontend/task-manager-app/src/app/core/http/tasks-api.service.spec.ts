@@ -67,4 +67,59 @@ describe('TasksApiService', () => {
     expect(req.request.headers.get('If-Match')).toBe('"5"');
     req.flush(task);
   });
+
+  it('attachLabel() issues POST /api/tasks/{id}/labels/{labelId} without If-Match', () => {
+    const task = makeTask();
+
+    service.attachLabel(task.id, 'label-1').subscribe();
+
+    const req = http.expectOne(apiUrl(`/api/tasks/${task.id}/labels/label-1`));
+    expect(req.request.method).toBe('POST');
+    expect(req.request.headers.has('If-Match')).toBe(false);
+    req.flush(task);
+  });
+
+  it('detachLabel() issues DELETE /api/tasks/{id}/labels/{labelId}', () => {
+    const task = makeTask();
+
+    service.detachLabel(task.id, 'label-1').subscribe();
+
+    const req = http.expectOne(apiUrl(`/api/tasks/${task.id}/labels/label-1`));
+    expect(req.request.method).toBe('DELETE');
+    req.flush(task);
+  });
+
+  it('addChecklistItem() issues POST /api/tasks/{id}/checklist without If-Match', () => {
+    const task = makeTask();
+
+    service.addChecklistItem(task.id, 'Write tests').subscribe();
+
+    const req = http.expectOne(apiUrl(`/api/tasks/${task.id}/checklist`));
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ title: 'Write tests' });
+    expect(req.request.headers.has('If-Match')).toBe(false);
+    req.flush(task);
+  });
+
+  it('updateChecklistItem() issues PUT /api/tasks/{id}/checklist/{itemId}', () => {
+    const task = makeTask();
+
+    service.updateChecklistItem(task.id, 'item-1', { isDone: true }).subscribe();
+
+    const req = http.expectOne(apiUrl(`/api/tasks/${task.id}/checklist/item-1`));
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ isDone: true });
+    expect(req.request.headers.has('If-Match')).toBe(false);
+    req.flush(task);
+  });
+
+  it('deleteChecklistItem() issues DELETE /api/tasks/{id}/checklist/{itemId}', () => {
+    const task = makeTask();
+
+    service.deleteChecklistItem(task.id, 'item-1').subscribe();
+
+    const req = http.expectOne(apiUrl(`/api/tasks/${task.id}/checklist/item-1`));
+    expect(req.request.method).toBe('DELETE');
+    req.flush(task);
+  });
 });

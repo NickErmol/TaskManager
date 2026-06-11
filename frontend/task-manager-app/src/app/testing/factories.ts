@@ -1,8 +1,11 @@
 import {
   ActivityItemDto,
+  BoardActivityItemDto,
   BoardDetailDto,
   BoardDto,
+  ChecklistItemDto,
   CompletionTrendPointDto,
+  LabelDto,
   NotificationDto,
   TaskDto,
   UserSummaryDto,
@@ -27,6 +30,7 @@ export const makeTask = (overrides: Partial<TaskDto> = {}): TaskDto => ({
   rowVersion: 1,
   labelIds: [],
   comments: [],
+  checklist: [],
   ...overrides,
 });
 
@@ -49,6 +53,22 @@ export const makeBoardDetail = (overrides: Partial<BoardDetailDto> = {}): BoardD
   members: [],
   labels: [],
   tasksByStatus: {},
+  ...overrides,
+});
+
+export const makeLabel = (overrides: Partial<LabelDto> = {}): LabelDto => ({
+  id: nextGuid(),
+  boardId: nextGuid(),
+  name: 'bug',
+  color: '#ef4444',
+  ...overrides,
+});
+
+export const makeChecklistItem = (overrides: Partial<ChecklistItemDto> = {}): ChecklistItemDto => ({
+  id: nextGuid(),
+  title: 'A subtask',
+  isDone: false,
+  position: 0,
   ...overrides,
 });
 
@@ -76,6 +96,15 @@ export const makeActivity = (overrides: Partial<ActivityItemDto> = {}): Activity
   eventType: 'TaskCreated',
   taskId: nextGuid(),
   boardId: nextGuid(),
+  occurredAt: '2026-06-01T00:00:00Z',
+  ...overrides,
+});
+
+export const makeBoardActivity = (overrides: Partial<BoardActivityItemDto> = {}): BoardActivityItemDto => ({
+  eventType: 'task.updated',
+  taskId: nextGuid(),
+  taskTitle: 'A task',
+  actorId: nextGuid(),
   occurredAt: '2026-06-01T00:00:00Z',
   ...overrides,
 });

@@ -2,14 +2,18 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { provideHttpClient } from '@angular/common/http';
 import { HttpErrorResponse } from '@angular/common/http';
 import { CdkDragDrop } from '@angular/cdk/drag-drop';
+import { signal } from '@angular/core';
 import { patchState } from '@ngrx/signals';
 import { of, throwError } from 'rxjs';
 import { BoardDetailComponent } from './board-detail.component';
+import { BoardRealtimeService } from '../../core/realtime';
 import { BoardsStore } from './boards.store';
 import { BoardsApiService } from '../../core/http/boards-api.service';
 import { TasksApiService } from '../../core/http/tasks-api.service';
+import { AnalyticsApiService } from '../../core/http/analytics-api.service';
 import { TaskDto, TaskStatus } from '../../core/models';
 import { makeBoardDetail, makeTask } from '../../testing/factories';
 
@@ -32,7 +36,13 @@ describe('BoardDetailComponent', () => {
     getBoards: jest.fn().mockReturnValue(of([])),
   };
   const tasksApi = { moveTask: jest.fn() };
+  const analyticsApi = { getBoardActivity: jest.fn().mockReturnValue(of([])) };
   const snackBar = { open: jest.fn() };
+  const realtimeStub = {
+    viewers: signal<string[]>([]),
+    join: jest.fn().mockResolvedValue(undefined),
+    leave: jest.fn().mockResolvedValue(undefined),
+  };
 
   const dropEvent = (task: TaskDto, currentIndex = 0): CdkDragDrop<TaskDto[]> =>
     ({
@@ -52,12 +62,20 @@ describe('BoardDetailComponent', () => {
       providers: [
         provideRouter([]),
         provideNoopAnimations(),
+        provideHttpClient(),
         { provide: BoardsApiService, useValue: boardsApi },
         { provide: TasksApiService, useValue: tasksApi },
+        { provide: AnalyticsApiService, useValue: analyticsApi },
         { provide: MatSnackBar, useValue: snackBar },
+        { provide: BoardRealtimeService, useValue: realtimeStub },
         {
           provide: ActivatedRoute,
-          useValue: { snapshot: { paramMap: convertToParamMap({ id: board.id }) } },
+          useValue: {
+            snapshot: {
+              paramMap: convertToParamMap({ id: board.id }),
+              queryParamMap: convertToParamMap({}),
+            },
+          },
         },
       ],
     }).compileComponents();
@@ -88,7 +106,8 @@ describe('BoardDetailComponent', () => {
 
     fixture.componentInstance.onDrop(dropEvent(task, 2), 'InProgress' as TaskStatus);
 
-    expect(moveSpy).toHaveBeenCalledWith(task, 'InProgress', 2);
+    // currentIndex=2 on an empty InProgress column → toRealPosition maps to realTasks.length=0
+    expect(moveSpy).toHaveBeenCalledWith(task, 'InProgress', 0);
   });
 
   it('refetches the board and toasts when moveTask returns 409', async () => {

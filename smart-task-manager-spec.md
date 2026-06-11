@@ -1658,3 +1658,122 @@ Each test scenario must pass before v1 is declared done.
 - [ ] Analytics dashboard shows personal task stats and completion trend chart
 - [ ] `docker compose up` starts all infra; all 5 services start and pass health checks
 - [ ] All services log to Seq with correlation IDs
+
+---
+## 13. v1.1 addenda
+
+### 13.1 Labels & filtering UI (Feature 1)
+The label backend (§4.3) gains its SPA surface:
+- **Label manager dialog** on board detail — create/delete board labels; colors come
+  from a fixed 12-swatch palette (no free-form color input; guarantees chip contrast).
+- **Label picker** in the task dialog — attach/detach against the existing
+  `POST/DELETE /api/tasks/{id}/labels/{labelId}` routes. These routes intentionally
+  do not require `If-Match`: label membership is a set operation where last-write-wins
+  is harmless. Note that label changes still bump the task's `RowVersion` (the domain
+  touches `UpdatedAt`), so the task dialog tracks the freshest `RowVersion` returned
+  by each toggle and uses it for a subsequent save.
+- **Filter bar** on board detail: free-text (title match), label multi-select
+  (OR within labels), assignee (`any | me | unassigned`), priority. Kinds compose
+  with AND. Filtering is client-side (the §4.3 200-task cap makes it instant) and
+  persists to query params (`?q=&labels=&assignee=&priority=`) so filtered views are
+  shareable. Dragging while filtered maps the drop index onto the unfiltered column
+  so hidden cards keep their relative order.
+
+### 13.2 Subtasks / checklists (Feature 2)
+`TaskItem` gains a `ChecklistItem` child collection (`Id, TaskItemId, Title 1–200, IsDone,
+Position, CreatedAt`; rich domain model — private setters + factory + `SetDone`/`Rename`).
+New `checklist_items` table, cascade-deleted with the task.
+
+Endpoints under `/api/tasks` (each returns the full fresh `TaskDto`, like the label routes):
+- `POST /api/tasks/{id}/checklist` — body `{ title }`; appends at end.
+- `PUT /api/tasks/{id}/checklist/{itemId}` — body `{ title?, isDone? }`; carries the
+  *desired* state (idempotent setter), not a blind toggle.
+- `DELETE /api/tasks/{id}/checklist/{itemId}`.
+
+**Documented concurrency exception** (alongside the `AppUser` setter exception in §5):
+checklist mutations do **not** require `If-Match` and do **not** advance
+`TaskItem.RowVersion` — the domain `AddChecklistItem`/`RemoveChecklistItem` and the item
+`SetDone`/`Rename` deliberately leave `UpdatedAt` untouched. They are an independent child
+collection where last-write-wins is harmless: two members toggling different items must
+never 409 each other, which is exactly the collaborative use the feature exists for. An
+integration test asserts the task's ETag (xmin) is unchanged across a checklist write. No
+integration events are published (checklist changes have no analytics meaning). Reordering
+is out of scope; `Position` is insertion order. Authorization mirrors other task mutations
+(Owner/Editor required); the update handler authorizes *before* resolving the item so a
+non-editor cannot probe item IDs.
+
+**SPA:** the task dialog gains an inline editor (add, toggle, rename-on-blur, delete) that
+mutates immediately and refetches the board on close; cards show a `done/total` progress
+chip (green at 100%) when a checklist exists.
+
+### 13.3 Real-time collaborative boards (Feature 3)
+Card changes fan out live to everyone viewing a board, plus presence.
+
+**`BoardHub` (Tasks Presentation, route `/hubs/board`)** — amends §4.4: *user-targeted*
+notifications stay in Notifications; *board-scoped* sync lives with the data owner, because
+joining a board group requires a membership check only Tasks can do. JWT arrives via the
+query string (`?access_token=`, same wiring as the notifications hub); `[Authorize]` on the
+hub. `JoinBoard(boardId)` validates membership via the board repository (non-members get a
+`HubException`) then adds the connection to group `board:{boardId}` and registers presence;
+`LeaveBoard`/`OnDisconnectedAsync` unwind both. Tasks now also validates JWTs (previously it
+trusted only the gateway's `X-User-Id` header for REST — REST still does; the hub adds bearer
+validation, with no fallback policy, so the REST endpoints stay anonymous + header-trusted).
+
+**Broadcast** — after each successful task mutation the endpoint fans the fresh `TaskDto`
+(`TaskUpserted(task, actorId)`) or `TaskDeleted(taskId, actorId)` to the board group. This is
+**best-effort, fire-after-commit, NOT through the RabbitMQ outbox**: the durable path
+(Analytics/Notifications) is untouched, and a missed frame self-heals on reload — the right
+consistency class for ephemeral UI sync. The Onion rule holds via an `IBoardBroadcaster` port
+in Application with the SignalR adapter in Presentation; endpoints invoke it (fire-and-forget,
+unobserved-exception-guarded, `TaskScheduler.Default`) after a successful `Result`. Comment
+mutations re-query the parent task to broadcast it; `DeleteTaskCommand` now returns the board
+id so the delete endpoint can address the group.
+
+**Presence** — `IPresenceTracker`, in-memory and connection-refcounted (a user with two tabs
+counts once; the last connection leaving removes them). Correct for the single-instance
+deployment; the interface is the drop-in seam for a Redis-backed impl if Tasks scales out
+(not built now). `PresenceChanged(viewerIds)` broadcasts to the group on every change.
+
+**Gateway** — `/hubs/board` routes to the tasks cluster (a more specific route than the
+existing `/hubs/{**catch-all}` → notifications, with `Order: 0`). CORS already allows the
+SignalR headers.
+
+**SPA** — `core/realtime/board-realtime.service.ts` manages one hub connection
+(`accessTokenFactory`, auto-reconnect, join/leave on board route enter/exit). `boards.store.ts`
+applies `TaskUpserted` only when `rowVersion` is **strictly newer** than the local copy
+(drops stale frames and the echo of the user's own optimistic write); `TaskDeleted` removes the
+card; on reconnect the board is refetched once. Presence avatars (initials chips, "+n" overflow)
+render in the board header and show **only other viewers**, not yourself.
+
+### 13.4 Per-board activity feed (Feature 4)
+A live, per-board audit trail in a collapsible panel on board detail.
+
+**Events** — two additive contract events, `TaskUpdatedEvent` and `TaskDeletedEvent`
+(`TaskId, BoardId, Title, ActorId, OccurredAt`), published by Tasks' update/delete handlers
+via the existing outbox and bound on the topic exchange (`task.updated` / `task.deleted`).
+The five existing task events are **not reshaped** — they already carry an actor and a title,
+so there is no breaking change to the Notifications consumers.
+
+**Projection — reuses `task_events`** (no separate `board_activity` table). Two columns are
+added: `ActorId` (the *performer*; distinct from `UserId`, which for `task.assigned` stays the
+assignee so "assigned to me" user-activity is unchanged) and `TaskTitle`. The existing
+inbox-dedup `EventProjector` populates them for every event type. No physical retention/trim:
+`task_events` is already the unbounded log that powers the completion trend (which needs 30
+days of `task.completed`), so the feed instead **query-limits** to the requested count.
+
+**Endpoint** — `GET /api/analytics/boards/{boardId}/activity?count=50` (count clamped to
+[1, 100], newest first). **Membership** is enforced by Analytics calling Tasks
+`GET /api/boards/{boardId}` with the caller's `X-User-Id` (Tasks REST trusts that header; it
+does not validate bearers — this refines the design's "forward the bearer"); 200 ⇒ member,
+otherwise 403. `IBoardMembershipChecker` (Application port) + typed `HttpClient` adapter
+(base address `TASKS_URL`) keep Analytics free of a membership table and of Identity coupling.
+Since Analytics registers no auth scheme, the endpoint returns a deterministic
+`Results.StatusCode(403)` (not `Results.Forbid()`).
+
+**SPA** — a collapsible panel on board detail loads the feed and reloads when a Feature-3
+`TaskUpserted`/`TaskDeleted` frame arrives (a tick signal), plus a manual refresh button. Actor
+display names resolve client-side via a memoizing cache over Identity `GET /api/users/{id}`.
+The feed is eventually consistent (outbox → RabbitMQ → projection), so it may trail the hub
+frame by a moment — the reload happens on the signal and the manual control covers the gap.
+
+This completes v1.1; the release is cut as `release/1.1.0` → tag `v1.1.0`.

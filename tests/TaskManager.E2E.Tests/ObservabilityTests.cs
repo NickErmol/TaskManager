@@ -10,11 +10,26 @@ namespace TaskManager.E2E.Tests;
 [Collection("E2E")]
 public class ObservabilityTests(PlaywrightFixture fixture)
 {
-    [Fact]
-    public async Task Gateway_health_endpoint_reports_healthy()
+    public static TheoryData<string, string> Services => new()
     {
-        var response = await fixture.Http.GetAsync($"{E2eConfig.GatewayUrl}/health");
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        { "gateway", E2eConfig.GatewayUrl },
+        { "identity", E2eConfig.IdentityUrl },
+        { "tasks", E2eConfig.TasksUrl },
+        { "notifications", E2eConfig.NotificationsUrl },
+        { "analytics", E2eConfig.AnalyticsUrl },
+    };
+
+    // DoD §12: "all 5 services start and pass health checks". Probe each service's
+    // own /health directly, not just the gateway's — a backend service can be down
+    // (its DB/Redis check failing) while the gateway itself still reports healthy.
+    [Theory]
+    [MemberData(nameof(Services))]
+    public async Task Each_service_health_endpoint_reports_healthy(string service, string baseUrl)
+    {
+        var response = await fixture.Http.GetAsync($"{baseUrl}/health");
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.OK,
+            $"{service} should pass its health check, but {baseUrl}/health returned '{body}'");
     }
 
     [Fact]

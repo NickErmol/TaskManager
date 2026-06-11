@@ -93,22 +93,36 @@ public static class Flows
     /// <summary>
     /// Mouse-based drag (CDK drag-drop ignores synthetic HTML5 drag events). CDK is
     /// sensitive to gesture timing, so retry until the card lands in the target column.
+    /// The card appears in the target the instant the SPA applies its optimistic move,
+    /// but persistence is an async <c>POST /api/tasks/{id}/move</c> fired afterwards —
+    /// so we also wait for that response before returning. Otherwise a follow-up reload
+    /// or navigation cancels the in-flight request and the move is silently lost (passes
+    /// locally where the POST wins the race, fails on slower CI runners).
     /// </summary>
     public static async Task DragTaskToColumnAsync(IPage page, string title, string columnLabel)
     {
         var targetCard = Column(page, columnLabel).Locator("[data-testid='task-card']", new() { HasText = title });
 
-        for (var attempt = 1; attempt <= 3; attempt++)
+        for (var attempt = 1; attempt <= 5; attempt++)
         {
+            // Arm the response waiter before the gesture so a fast POST isn't missed.
+            var moveConfirmed = page.WaitForResponseAsync(
+                r => r.Url.Contains("/api/tasks/") && r.Url.Contains("/move"),
+                new() { Timeout = 6000 });
+
             await DragOnceAsync(page, title, columnLabel);
             try
             {
-                await targetCard.WaitForAsync(new() { Timeout = 4000 });
+                await targetCard.WaitForAsync(new() { Timeout = 5000 });
+                var response = await moveConfirmed;
+                if (!response.Ok)
+                    throw new PlaywrightException($"move POST returned HTTP {response.Status}");
                 return;
             }
-            catch (TimeoutException) when (attempt < 3)
+            catch (Exception) when (attempt < 5)
             {
-                // gesture didn't register with CDK — let the board settle and retry
+                // gesture didn't register with CDK, or the move wasn't confirmed —
+                // let the board settle and retry
                 await page.WaitForTimeoutAsync(500);
             }
         }
@@ -132,11 +146,23 @@ public static class Flows
         await page.Mouse.DownAsync();
         // exceed CDK's drag-start threshold before travelling
         await page.Mouse.MoveAsync(startX + 8, startY + 8, new() { Steps = 6 });
-        await page.WaitForTimeoutAsync(50);
-        await page.Mouse.MoveAsync(endX, endY, new() { Steps = 25 });
+        await page.WaitForTimeoutAsync(100);
+
+        // Travel to the target in paused waypoints. CDK samples the pointer on
+        // requestAnimationFrame; a single fast sweep can outrun its drop-list hover
+        // detection on a slow/headless CI runner, so pause after each hop to let a
+        // frame land and CDK register the hovered list.
+        const int hops = 5;
+        for (var h = 1; h <= hops; h++)
+        {
+            var x = startX + (endX - startX) * h / hops;
+            var y = startY + (endY - startY) * h / hops;
+            await page.Mouse.MoveAsync(x, y, new() { Steps = 8 });
+            await page.WaitForTimeoutAsync(60);
+        }
         // settle over the target so CDK registers the hovered drop list
         await page.Mouse.MoveAsync(endX, endY, new() { Steps = 5 });
-        await page.WaitForTimeoutAsync(50);
+        await page.WaitForTimeoutAsync(150);
         await page.Mouse.UpAsync();
     }
 
@@ -158,6 +184,44 @@ public static class Flows
         await dialog.GetByLabel("Search by name or email").FillAsync(member.Email);
         await dialog.Locator("mat-list-option", new() { HasText = member.DisplayName }).ClickAsync();
         await dialog.GetByRole(AriaRole.Button, new() { Name = "Invite" }).ClickAsync();
+        await dialog.WaitForAsync(new() { State = WaitForSelectorState.Detached });
+    }
+
+    /// <summary>Creates a board label through the manage-labels dialog (first palette color).</summary>
+    public static async Task CreateLabelAsync(IPage page, string name)
+    {
+        await page.GetByTestId("manage-labels-button").ClickAsync();
+        var dialog = page.Locator("mat-dialog-container");
+        await dialog.GetByTestId("label-name-input").FillAsync(name);
+        await dialog.GetByTestId("create-label-button").ClickAsync();
+        await dialog.Locator("[data-testid='label-row']", new() { HasText = name }).WaitForAsync();
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Close" }).ClickAsync();
+        await dialog.WaitForAsync(new() { State = WaitForSelectorState.Detached });
+    }
+
+    /// <summary>Toggles a label on a task via the task dialog's label picker.</summary>
+    public static async Task ToggleTaskLabelAsync(IPage page, string taskTitle, string labelName)
+    {
+        await TaskCard(page, taskTitle).ClickAsync();
+        var dialog = page.Locator("mat-dialog-container");
+        await dialog.Locator("[data-testid='label-toggle']", new() { HasText = labelName }).ClickAsync();
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
+        await dialog.WaitForAsync(new() { State = WaitForSelectorState.Detached });
+    }
+
+    /// <summary>Adds a checklist item to a task through the task dialog, then closes the dialog.</summary>
+    public static async Task AddChecklistItemAsync(IPage page, string taskTitle, string itemText)
+    {
+        await TaskCard(page, taskTitle).ClickAsync();
+        var dialog = page.Locator("mat-dialog-container");
+        var rows = dialog.GetByTestId("checklist-item");
+        var before = await rows.CountAsync();
+        await dialog.GetByTestId("checklist-new-input").FillAsync(itemText);
+        await dialog.GetByTestId("checklist-add-button").ClickAsync();
+        // The item title renders inside an <input value="..."> (not element text), so a
+        // HasText filter won't match — wait for the newly appended row to exist by index.
+        await rows.Nth(before).WaitForAsync();
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
         await dialog.WaitForAsync(new() { State = WaitForSelectorState.Detached });
     }
 }

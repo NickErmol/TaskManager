@@ -10,6 +10,7 @@ public class TaskRepository(TasksDbContext db) : ITaskRepository
         => db.Tasks
             .Include(t => t.Comments)
             .Include(t => t.Labels)
+            .Include(t => t.Checklist)
             .FirstOrDefaultAsync(t => t.Id == id, ct);
 
     public async Task<(List<TaskItem> Results, bool Truncated)> QueryAsync(TaskFilterParams filter, CancellationToken ct = default)

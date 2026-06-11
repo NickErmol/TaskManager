@@ -94,4 +94,38 @@ public class AnalyticsQueryServiceTests
         activity[0].OccurredAt.Should().Be(newer.OccurredAt);
         activity.Should().BeInDescendingOrder(a => a.OccurredAt);
     }
+
+    [Fact]
+    public async Task GetBoardActivityAsync_MapsNewestFirst_WithActorAndTitle()
+    {
+        var boardId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
+        var rows = new List<TaskEventRecord>
+        {
+            new() { Id = Guid.NewGuid(), BoardId = boardId, TaskId = Guid.NewGuid(), EventType = "task.updated",
+                    UserId = Guid.NewGuid(), ActorId = actorId, TaskTitle = "Edited", OccurredAt = DateTimeOffset.UtcNow },
+        };
+        _repo.GetBoardActivityAsync(boardId, 50, Arg.Any<CancellationToken>()).Returns(rows);
+        var service = new AnalyticsQueryService(_repo);
+
+        var result = await service.GetBoardActivityAsync(boardId, 50, default);
+
+        result.Should().ContainSingle();
+        result[0].EventType.Should().Be("task.updated");
+        result[0].TaskTitle.Should().Be("Edited");
+        result[0].ActorId.Should().Be(actorId);
+    }
+
+    [Fact]
+    public async Task GetBoardActivityAsync_ClampsCountTo100()
+    {
+        var boardId = Guid.NewGuid();
+        _repo.GetBoardActivityAsync(boardId, 100, Arg.Any<CancellationToken>())
+            .Returns(new List<TaskEventRecord>());
+        var service = new AnalyticsQueryService(_repo);
+
+        await service.GetBoardActivityAsync(boardId, 9999, default);
+
+        await _repo.Received(1).GetBoardActivityAsync(boardId, 100, Arg.Any<CancellationToken>());
+    }
 }

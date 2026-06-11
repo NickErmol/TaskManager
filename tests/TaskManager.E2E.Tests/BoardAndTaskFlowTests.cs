@@ -99,6 +99,51 @@ public class BoardAndTaskFlowTests(PlaywrightFixture fixture)
             .ToBeVisibleAsync();
     }
 
+    [Fact]
+    public async Task Filtering_by_label_shows_only_matching_cards()
+    {
+        var page = await NewBoardPageAsync();
+        await Flows.CreateTaskAsync(page, "Tagged task");
+        await Flows.CreateTaskAsync(page, "Plain task");
+
+        await Flows.CreateLabelAsync(page, "urgent");
+        await Flows.ToggleTaskLabelAsync(page, "Tagged task", "urgent");
+
+        // filter by the label
+        await page.Locator("[data-testid='filter-label']", new() { HasText = "urgent" }).ClickAsync();
+        await Assertions.Expect(Flows.TaskCard(page, "Plain task")).ToBeHiddenAsync();
+        await Assertions.Expect(Flows.TaskCard(page, "Tagged task")).ToBeVisibleAsync();
+        await Assertions.Expect(page.GetByTestId("filter-count")).ToContainTextAsync("1 of 2");
+
+        // the filter round-trips through the URL
+        page.Url.Should().Contain("labels=");
+
+        // clear restores everything
+        await page.GetByTestId("filter-clear").ClickAsync();
+        await Assertions.Expect(Flows.TaskCard(page, "Plain task")).ToBeVisibleAsync();
+    }
+
+    [Fact]
+    public async Task Checklist_add_and_complete_updates_card_progress()
+    {
+        var page = await NewBoardPageAsync();
+        await Flows.CreateTaskAsync(page, "Task with checklist");
+
+        await Flows.AddChecklistItemAsync(page, "Task with checklist", "Write tests");
+
+        var card = Flows.TaskCard(page, "Task with checklist");
+        await Assertions.Expect(card.GetByTestId("checklist-progress")).ToContainTextAsync("0/1");
+
+        // complete the only item
+        await card.ClickAsync();
+        var dialog = page.Locator("mat-dialog-container");
+        await dialog.GetByTestId("checklist-toggle").First.CheckAsync();
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
+        await dialog.WaitForAsync(new() { State = WaitForSelectorState.Detached });
+
+        await Assertions.Expect(card.GetByTestId("checklist-progress")).ToContainTextAsync("1/1");
+    }
+
     private async Task<IPage> NewBoardPageAsync()
     {
         var page = await fixture.NewPageAsync();

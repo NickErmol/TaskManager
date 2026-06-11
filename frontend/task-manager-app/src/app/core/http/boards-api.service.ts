@@ -7,6 +7,7 @@ import {
   BoardDetailDto,
   BoardDto,
   CreateBoardRequest,
+  CreateLabelRequest,
   LabelDto,
   UpdateBoardRequest,
 } from '../models';
@@ -45,5 +46,13 @@ export class BoardsApiService {
 
   getLabels(boardId: string): Observable<LabelDto[]> {
     return this.http.get<LabelDto[]>(apiUrl(`/api/boards/${boardId}/labels`));
+  }
+
+  createLabel(boardId: string, request: CreateLabelRequest): Observable<LabelDto> {
+    return this.http.post<LabelDto>(apiUrl(`/api/boards/${boardId}/labels`), request);
+  }
+
+  deleteLabel(boardId: string, labelId: string): Observable<void> {
+    return this.http.delete<void>(apiUrl(`/api/boards/${boardId}/labels/${labelId}`));
   }
 }

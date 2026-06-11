@@ -48,6 +48,7 @@ public class TasksWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Environment.SetEnvironmentVariable("ConnectionStrings__TasksDb", _postgres.GetConnectionString());
         Environment.SetEnvironmentVariable("RABBITMQ_URL", _rabbit.GetConnectionString());
         Environment.SetEnvironmentVariable("OUTBOX_QUERY_DELAY_SECONDS", "1");
+        Environment.SetEnvironmentVariable("JWT_SECRET", "tasks-tests-jwt-secret-must-be-at-least-32-bytes-long");
     }
 
     public new async Task DisposeAsync()
@@ -60,6 +61,7 @@ public class TasksWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Environment.SetEnvironmentVariable("ConnectionStrings__TasksDb", null);
         Environment.SetEnvironmentVariable("RABBITMQ_URL", null);
         Environment.SetEnvironmentVariable("OUTBOX_QUERY_DELAY_SECONDS", null);
+        Environment.SetEnvironmentVariable("JWT_SECRET", null);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -74,6 +76,7 @@ public class TasksWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
             ["ConnectionStrings:TasksDb"] = _postgres.GetConnectionString(),
             ["RABBITMQ_URL"] = _rabbit.GetConnectionString(),
             ["OUTBOX_QUERY_DELAY_SECONDS"] = "1",
+            ["JWT_SECRET"] = "tasks-tests-jwt-secret-must-be-at-least-32-bytes-long",
         }));
         // Wraps the bus already registered by AddTasksInfrastructure; transport becomes
         // the in-memory test transport, which is what Harness.Published observes.

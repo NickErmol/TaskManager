@@ -23,6 +23,14 @@ jobs:
           - { name: analytics,     dockerfile: src/services/analytics/TaskManager.Analytics/Dockerfile }
     steps:
       - uses: actions/checkout@v4
+      # GHCR rejects mixed-case repository names; the owner (github.repository_owner)
+      # can contain capitals, so lowercase it here. Workflow-expression context has no
+      # lowercase function — do it in bash and override IMAGE_PREFIX for later steps.
+      - name: Lowercase image prefix
+        run: echo "IMAGE_PREFIX=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/smart-task-manager" >> "$GITHUB_ENV"
+      # The gha cache backend (cache-to: type=gha) needs the buildx container
+      # driver; the default docker driver can't export a cache and the build fails.
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -42,6 +50,9 @@ jobs:
   deploy-staging-frontend:
     runs-on: ubuntu-latest
     needs: build-and-push
+    # Skipped until the Vercel secrets are wired up — mirrors the FLY_DEPLOY_ENABLED
+    # gate on the backend job so CD stays green instead of failing on empty secrets.
+    if: vars.VERCEL_DEPLOY_ENABLED == 'true'
     steps:
       - uses: actions/checkout@v4
       # hashFiles() is not available in job-level `if` — gate on a step output instead.

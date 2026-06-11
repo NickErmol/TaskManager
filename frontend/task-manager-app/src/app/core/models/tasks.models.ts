@@ -26,6 +26,13 @@ export interface CommentDto {
   editedAt: string | null;
 }
 
+export interface ChecklistItemDto {
+  id: string;
+  title: string;
+  isDone: boolean;
+  position: number;
+}
+
 export interface TaskDto {
   id: string;
   boardId: string;
@@ -42,6 +49,7 @@ export interface TaskDto {
   rowVersion: number;
   labelIds: string[];
   comments: CommentDto[];
+  checklist: ChecklistItemDto[];
 }
 
 export interface BoardDto {
@@ -78,6 +86,11 @@ export interface UpdateBoardRequest {
 export interface AddMemberRequest {
   memberId: string;
   role: BoardRole;
+}
+
+export interface CreateLabelRequest {
+  name: string;
+  color: string;
 }
 
 export interface CreateTaskRequest {

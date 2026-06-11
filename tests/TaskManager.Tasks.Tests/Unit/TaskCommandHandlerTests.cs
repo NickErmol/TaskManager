@@ -67,7 +67,7 @@ public class TaskCommandHandlerTests
         var editor = Guid.NewGuid();
         _tasks.GetByIdAsync(task.Id, Arg.Any<CancellationToken>()).Returns(task);
         SetRole(task.BoardId, editor, BoardRole.Editor);
-        var handler = new UpdateTaskCommandHandler(_tasks, _boards, _uow, Mapper);
+        var handler = new UpdateTaskCommandHandler(_tasks, _boards, _uow, _publisher, Mapper);
 
         var result = await handler.Handle(
             new UpdateTaskCommand(task.Id, "new title", "d", "Critical", null, task.RowVersion, editor), default);
@@ -84,7 +84,7 @@ public class TaskCommandHandlerTests
         var editor = Guid.NewGuid();
         _tasks.GetByIdAsync(task.Id, Arg.Any<CancellationToken>()).Returns(task);
         SetRole(task.BoardId, editor, BoardRole.Editor);
-        var handler = new UpdateTaskCommandHandler(_tasks, _boards, _uow, Mapper);
+        var handler = new UpdateTaskCommandHandler(_tasks, _boards, _uow, _publisher, Mapper);
 
         var result = await handler.Handle(
             new UpdateTaskCommand(task.Id, "t", null, "Low", null, task.RowVersion + 1, editor), default);
@@ -188,7 +188,7 @@ public class TaskCommandHandlerTests
         var viewer = Guid.NewGuid();
         _tasks.GetByIdAsync(task.Id, Arg.Any<CancellationToken>()).Returns(task);
         SetRole(task.BoardId, viewer, BoardRole.Viewer);
-        var handler = new DeleteTaskCommandHandler(_tasks, _boards, _uow);
+        var handler = new DeleteTaskCommandHandler(_tasks, _boards, _uow, _publisher);
 
         var result = await handler.Handle(new DeleteTaskCommand(task.Id, viewer), default);
 
@@ -203,11 +203,62 @@ public class TaskCommandHandlerTests
         var editor = Guid.NewGuid();
         _tasks.GetByIdAsync(task.Id, Arg.Any<CancellationToken>()).Returns(task);
         SetRole(task.BoardId, editor, BoardRole.Editor);
-        var handler = new DeleteTaskCommandHandler(_tasks, _boards, _uow);
+        var handler = new DeleteTaskCommandHandler(_tasks, _boards, _uow, _publisher);
 
         var result = await handler.Handle(new DeleteTaskCommand(task.Id, editor), default);
 
         result.IsSuccess.Should().BeTrue();
         _tasks.Received(1).Remove(task);
+    }
+
+    [Fact]
+    public async Task DeleteTaskCommandHandler_OnSuccess_ReturnsBoardId()
+    {
+        var boardId = Guid.NewGuid();
+        var task = Fake.Task(boardId);
+        var editor = Guid.NewGuid();
+        _tasks.GetByIdAsync(task.Id, Arg.Any<CancellationToken>()).Returns(task);
+        _boards.GetMemberRoleAsync(boardId, editor, Arg.Any<CancellationToken>()).Returns(BoardRole.Editor);
+        var handler = new DeleteTaskCommandHandler(_tasks, _boards, _uow, _publisher);
+
+        var result = await handler.Handle(new DeleteTaskCommand(task.Id, editor), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().Be(boardId);
+    }
+
+    [Fact]
+    public async Task UpdateTaskCommandHandler_OnSuccess_PublishesTaskUpdatedEvent()
+    {
+        var (boardId, editor) = (Guid.NewGuid(), Guid.NewGuid());
+        var task = Fake.Task(boardId);
+        _tasks.GetByIdAsync(task.Id, Arg.Any<CancellationToken>()).Returns(task);
+        _boards.GetMemberRoleAsync(boardId, editor, Arg.Any<CancellationToken>()).Returns(BoardRole.Editor);
+        var handler = new UpdateTaskCommandHandler(_tasks, _boards, _uow, _publisher, Mapper);
+
+        var result = await handler.Handle(
+            new UpdateTaskCommand(task.Id, "new title", null, "Medium", null, task.RowVersion, editor), default);
+
+        result.IsSuccess.Should().BeTrue();
+        await _publisher.Received(1).PublishAsync(
+            Arg.Is<TaskUpdatedEvent>(e => e.TaskId == task.Id && e.BoardId == boardId && e.ActorId == editor && e.Title == "new title"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DeleteTaskCommandHandler_OnSuccess_PublishesTaskDeletedEvent()
+    {
+        var (boardId, editor) = (Guid.NewGuid(), Guid.NewGuid());
+        var task = Fake.Task(boardId);
+        _tasks.GetByIdAsync(task.Id, Arg.Any<CancellationToken>()).Returns(task);
+        _boards.GetMemberRoleAsync(boardId, editor, Arg.Any<CancellationToken>()).Returns(BoardRole.Editor);
+        var handler = new DeleteTaskCommandHandler(_tasks, _boards, _uow, _publisher);
+
+        var result = await handler.Handle(new DeleteTaskCommand(task.Id, editor), default);
+
+        result.IsSuccess.Should().BeTrue();
+        await _publisher.Received(1).PublishAsync(
+            Arg.Is<TaskDeletedEvent>(e => e.TaskId == task.Id && e.BoardId == boardId && e.ActorId == editor),
+            Arg.Any<CancellationToken>());
     }
 }

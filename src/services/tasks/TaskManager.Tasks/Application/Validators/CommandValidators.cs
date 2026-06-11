@@ -86,3 +86,16 @@ public class CreateLabelCommandValidator : AbstractValidator<CreateLabelCommand>
             .WithMessage("Color must be a valid hex string e.g. #4ade80");
     }
 }
+
+public class AddChecklistItemCommandValidator : AbstractValidator<AddChecklistItemCommand>
+{
+    public AddChecklistItemCommandValidator()
+        => RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
+}
+
+public class UpdateChecklistItemCommandValidator : AbstractValidator<UpdateChecklistItemCommand>
+{
+    public UpdateChecklistItemCommandValidator()
+        // Title is optional on PUT; when present it must be 1–200 chars.
+        => RuleFor(x => x.Title!).NotEmpty().MaximumLength(200).When(x => x.Title is not null);
+}

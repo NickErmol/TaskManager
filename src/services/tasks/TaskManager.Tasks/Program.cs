@@ -1,14 +1,20 @@
+using System.Text;
 using FluentValidation;
 using Mediator;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using TaskManager.Tasks.Application.Behaviors;
+using TaskManager.Tasks.Application.Interfaces;
 using TaskManager.Tasks.Application.Mappers;
 using TaskManager.Tasks.Application.Services;
 using TaskManager.Tasks.Infrastructure;
 using TaskManager.Tasks.Infrastructure.Persistence;
+using TaskManager.Tasks.Infrastructure.Realtime;
 using TaskManager.Tasks.Presentation.Background;
 using TaskManager.Tasks.Presentation.Endpoints;
+using TaskManager.Tasks.Presentation.Hubs;
 using TaskManager.Tasks.Presentation.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -27,6 +33,45 @@ builder.Services.AddScoped(typeof(IPipelineBehavior<,>), typeof(ValidationBehavi
 builder.Services.AddScoped(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddSingleton<TasksMapper>();
+
+// Real-time board sync (spec §F3): SignalR hub + best-effort broadcaster + in-memory presence.
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IPresenceTracker, PresenceTracker>();
+builder.Services.AddSingleton<IBoardBroadcaster, SignalRBoardBroadcaster>();
+
+// JWT auth for the hub. REST endpoints trust the gateway's X-User-Id header (spec §8);
+// the WS handshake can't carry an Authorization header, so the token rides the query
+// string and is lifted here for /hubs/* paths (spec §4.4).
+var jwtSecret = builder.Configuration["JWT_SECRET"] ?? builder.Configuration["Jwt:SecretKey"] ?? string.Empty;
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "TaskManager.Identity",
+            ValidateAudience = true,
+            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "TaskManager",
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromSeconds(30),
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    context.HttpContext.Request.Path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            },
+        };
+    });
+builder.Services.AddAuthorization();
 
 // Deadline scan (Application logic, Presentation hosting)
 builder.Services.AddScoped<DeadlineScanner>();
@@ -54,9 +99,13 @@ using (var scope = app.Services.CreateScope())
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseSerilogRequestLogging();
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapHealthChecks("/health");
 app.MapBoardEndpoints();
 app.MapTaskEndpoints();
+app.MapHub<BoardHub>("/hubs/board");
 
 app.Run();
 

@@ -219,6 +219,9 @@ namespace TaskManager.Analytics.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid>("ActorId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("BoardId")
                         .HasColumnType("uuid");
 
@@ -233,10 +236,16 @@ namespace TaskManager.Analytics.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("TaskId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("TaskTitle")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BoardId", "OccurredAt");
 
                     b.HasIndex("UserId", "OccurredAt");
 
