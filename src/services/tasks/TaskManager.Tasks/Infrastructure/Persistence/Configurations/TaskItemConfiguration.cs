@@ -22,9 +22,11 @@ public class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.HasMany(t => t.Comments).WithOne().HasForeignKey(c => c.TaskId).OnDelete(DeleteBehavior.Cascade);
         builder.HasMany(t => t.Labels).WithOne().HasForeignKey(l => l.TaskId).OnDelete(DeleteBehavior.Cascade);
         builder.HasMany(t => t.Checklist).WithOne().HasForeignKey(c => c.TaskItemId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasMany(t => t.Attachments).WithOne().HasForeignKey(a => a.TaskItemId).OnDelete(DeleteBehavior.Cascade);
         builder.Navigation(t => t.Comments).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(t => t.Labels).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(t => t.Checklist).UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.Navigation(t => t.Attachments).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         builder.HasIndex(t => t.BoardId);
         builder.HasIndex(t => t.AssignedTo);
