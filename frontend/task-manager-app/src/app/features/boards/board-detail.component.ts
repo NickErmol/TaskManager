@@ -47,7 +47,7 @@ const COLUMN_LABELS: Record<TaskStatus, string> = {
           <mat-icon>arrow_back</mat-icon>
         </a>
         <h1 class="text-2xl font-semibold text-slate-800">{{ store.currentBoard()?.name }}</h1>
-        <tm-presence-avatars [viewerIds]="viewerIds()" />
+        <tm-presence-avatars [viewerIds]="otherViewerIds()" />
         <span class="flex-1"></span>
         <button mat-stroked-button type="button" data-testid="manage-labels-button" (click)="manageLabels()">
           <mat-icon>label</mat-icon>
@@ -117,7 +117,8 @@ export class BoardDetailComponent implements OnInit, OnDestroy {
   private readonly authStore = inject(AuthStore);
   private readonly realtime = inject(BoardRealtimeService);
 
-  protected readonly viewerIds = this.realtime.viewers;
+  protected readonly otherViewerIds = computed(() =>
+    this.realtime.viewers().filter((id) => id !== this.authStore.user()?.id));
 
   private readonly boardId = this.route.snapshot.paramMap.get('id') ?? '';
 
