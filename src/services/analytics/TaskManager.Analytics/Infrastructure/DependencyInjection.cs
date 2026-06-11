@@ -43,6 +43,8 @@ public static class DependencyInjection
             x.AddConsumer<TaskStatusChangedEventConsumer>();
             x.AddConsumer<TaskCompletedEventConsumer>();
             x.AddConsumer<TaskCommentAddedEventConsumer>();
+            x.AddConsumer<TaskUpdatedEventConsumer>();
+            x.AddConsumer<TaskDeletedEventConsumer>();
 
             x.UsingRabbitMq((context, cfg) =>
             {
@@ -58,12 +60,16 @@ public static class DependencyInjection
                 MapTaskManagerEvent<TaskStatusChangedEvent>(cfg, "task.status-changed");
                 MapTaskManagerEvent<TaskCompletedEvent>(cfg, "task.completed");
                 MapTaskManagerEvent<TaskCommentAddedEvent>(cfg, "task.comment-added");
+                MapTaskManagerEvent<TaskUpdatedEvent>(cfg, "task.updated");
+                MapTaskManagerEvent<TaskDeletedEvent>(cfg, "task.deleted");
 
                 ReceiveFromTopic<TaskCreatedEventConsumer>(context, cfg, "analytics-task-created", "task.created");
                 ReceiveFromTopic<TaskAssignedEventConsumer>(context, cfg, "analytics-task-assigned", "task.assigned");
                 ReceiveFromTopic<TaskStatusChangedEventConsumer>(context, cfg, "analytics-task-status-changed", "task.status-changed");
                 ReceiveFromTopic<TaskCompletedEventConsumer>(context, cfg, "analytics-task-completed", "task.completed");
                 ReceiveFromTopic<TaskCommentAddedEventConsumer>(context, cfg, "analytics-task-comment-added", "task.comment-added");
+                ReceiveFromTopic<TaskUpdatedEventConsumer>(context, cfg, "analytics-task-updated", "task.updated");
+                ReceiveFromTopic<TaskDeletedEventConsumer>(context, cfg, "analytics-task-deleted", "task.deleted");
             });
         });
 
