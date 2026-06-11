@@ -188,7 +188,7 @@ const PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Critical'];
             }
           </ul>
 
-          <input type="file" data-testid="attachment-input" (change)="uploadFile($event)" />
+          <input type="file" aria-label="Upload attachment" data-testid="attachment-input" (change)="uploadFile($event)" />
         </div>
 
         @if (selectedAssignee(); as assignee) {
@@ -289,6 +289,7 @@ export class TaskDetailComponent {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
+    this.error.set(null);
     try {
       const updated = await firstValueFrom(this.tasksApi.uploadAttachment(this.data.task.id, file));
       this.attachments.set(updated.attachments);
@@ -301,6 +302,7 @@ export class TaskDetailComponent {
   }
 
   async removeAttachment(att: AttachmentDto): Promise<void> {
+    this.error.set(null);
     try {
       const updated = await firstValueFrom(this.tasksApi.deleteAttachment(this.data.task.id, att.id));
       this.attachments.set(updated.attachments);
@@ -318,7 +320,8 @@ export class TaskDetailComponent {
       link.href = url;
       link.download = att.fileName;
       link.click();
-      URL.revokeObjectURL(url);
+      // Defer revoke: .click() may start the download asynchronously on some UAs.
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
     } catch {
       this.error.set('Could not download the attachment.');
     }
