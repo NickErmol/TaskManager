@@ -33,7 +33,8 @@ export const applyFilter = (
     if (text.length > 0 && !task.title.toLowerCase().includes(text)) return false;
     if (filter.labelIds.length > 0 && !filter.labelIds.some((id) => task.labelIds.includes(id)))
       return false;
-    if (filter.assignee === 'me' && task.assignedTo !== currentUserId) return false;
+    if (filter.assignee === 'me' && (currentUserId === null || task.assignedTo !== currentUserId))
+      return false;
     if (filter.assignee === 'unassigned' && task.assignedTo !== null) return false;
     if (filter.priority !== null && task.priority !== filter.priority) return false;
     return true;
@@ -44,6 +45,7 @@ export const applyFilter = (
  * A drop at `visibleIndex` in a filtered column must land at the real position of
  * the task currently occupying that visible slot (or at the real end when dropped
  * after the last visible card), so hidden cards keep their relative order.
+ * Throws when visibleTasks is not a subset of realTasks — that indicates a caller bug, and a silent -1 would corrupt card order via splice(-1).
  */
 export const toRealPosition = (
   realTasks: TaskDto[],
@@ -52,5 +54,7 @@ export const toRealPosition = (
 ): number => {
   if (visibleIndex >= visibleTasks.length) return realTasks.length;
   const anchorId = visibleTasks[visibleIndex].id;
-  return realTasks.findIndex((t) => t.id === anchorId);
+  const index = realTasks.findIndex((t) => t.id === anchorId);
+  if (index === -1) throw new Error(`toRealPosition: anchor task ${anchorId} is not in the column`);
+  return index;
 };

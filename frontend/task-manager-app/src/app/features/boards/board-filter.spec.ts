@@ -36,6 +36,18 @@ describe('applyFilter', () => {
     expect(applyFilter([mine, other, free], { ...EMPTY_FILTER, assignee: 'me' }, me)).toEqual([mine]);
     expect(applyFilter([mine, other, free], { ...EMPTY_FILTER, assignee: 'unassigned' }, me)).toEqual([free]);
   });
+
+  it('assignee "me" matches nothing when the current user is unknown', () => {
+    const mine = makeTask({ assignedTo: 'me-id' });
+    const free = makeTask({ assignedTo: null });
+    expect(applyFilter([mine, free], { ...EMPTY_FILTER, assignee: 'me' }, null)).toEqual([]);
+  });
+
+  it('AND composition includes the assignee dimension', () => {
+    const hit = makeTask({ title: 'login', assignedTo: me });
+    const wrongAssignee = makeTask({ title: 'login', assignedTo: 'other' });
+    expect(applyFilter([hit, wrongAssignee], { ...EMPTY_FILTER, text: 'login', assignee: 'me' }, me)).toEqual([hit]);
+  });
 });
 
 describe('isFilterActive', () => {
@@ -45,6 +57,10 @@ describe('isFilterActive', () => {
     expect(isFilterActive({ ...EMPTY_FILTER, labelIds: ['l1'] })).toBe(true);
     expect(isFilterActive({ ...EMPTY_FILTER, assignee: 'me' })).toBe(true);
     expect(isFilterActive({ ...EMPTY_FILTER, priority: 'Low' })).toBe(true);
+  });
+
+  it('treats whitespace-only text as inactive', () => {
+    expect(isFilterActive({ ...EMPTY_FILTER, text: '   ' })).toBe(false);
   });
 });
 
@@ -64,5 +80,10 @@ describe('toRealPosition', () => {
 
   it('is the identity when nothing is filtered out', () => {
     expect(toRealPosition(real, real, 2)).toBe(2);
+  });
+
+  it('throws when the anchor task is missing from the real column', () => {
+    const alien = makeTask();
+    expect(() => toRealPosition(real, [alien], 0)).toThrow('not in the column');
   });
 });
