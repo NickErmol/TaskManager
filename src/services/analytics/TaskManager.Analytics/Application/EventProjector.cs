@@ -49,6 +49,14 @@ public class EventProjector(IAnalyticsRepository repository, IUnitOfWork uow)
                 Record(e.TaskId, e.BoardId, "task.deleted", e.ActorId, e.ActorId, e.Title, e.OccurredAt);
                 break;
 
+            case AttachmentAddedEvent e:
+                Record(e.TaskId, e.BoardId, "task.attachment-added", e.UploadedById, e.UploadedById, e.Title, e.OccurredAt);
+                break;
+
+            case AttachmentRemovedEvent e:
+                Record(e.TaskId, e.BoardId, "task.attachment-removed", e.ActorId, e.ActorId, e.Title, e.OccurredAt);
+                break;
+
             default:
                 // DeadlineApproachingEvent etc. — system events, not user activity.
                 return;
