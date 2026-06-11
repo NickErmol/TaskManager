@@ -4,6 +4,35 @@ All notable changes to Smart Task Manager are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-06-11
+
+"Live Collaboration" release. Four features extending v1.0, each landing a v1.1
+addendum in `smart-task-manager-spec.md` (§13.1–§13.4).
+
+### Added
+- **Labels & filtering UI** (§13.1) — label manager dialog (12-swatch palette),
+  label picker in the task dialog, and a board filter bar (free-text, label
+  multi-select, assignee tri-state, priority) composed AND-across / OR-within-labels,
+  persisted to shareable query params. Client-side filtering (the 200-task cap makes
+  it instant).
+- **Subtasks / checklists** (§13.2) — `ChecklistItem` child collection on tasks
+  (`checklist_items` table), inline editor in the task dialog (add, toggle,
+  rename, delete), and a `done/total` progress chip on cards. Checklist writes take
+  no `If-Match` and don't advance the task `RowVersion`, so concurrent member toggles
+  never conflict.
+- **Real-time collaborative boards** (§13.3) — a Tasks-hosted SignalR `BoardHub`
+  (`/hubs/board`) with membership-gated join, best-effort fire-after-commit
+  `TaskUpserted`/`TaskDeleted` broadcast (not via the outbox), and in-memory
+  connection-refcounted presence. The SPA applies frames only when strictly newer
+  than the local copy (dropping stale frames and its own optimistic echo) and shows
+  presence avatars of other viewers.
+- **Per-board activity feed** (§13.4) — a collapsible live audit panel on board
+  detail, served by a membership-enforced
+  `GET /api/analytics/boards/{id}/activity`. Two new contract events
+  (`TaskUpdatedEvent`, `TaskDeletedEvent`) plus `ActorId`/`TaskTitle` enrichment of
+  the Analytics `task_events` projection; actor names resolved client-side via the
+  Identity user lookup.
+
 ## [1.0.0] - 2026-06-10
 
 First production release. Feature-complete v1 per `smart-task-manager-spec.md`,
@@ -34,4 +63,5 @@ delivered across the 8-step implementation playbook (spec §11).
   SignalR negotiate preflight succeeds.
 - Board-create form wrapped in a `FormGroup` so `(ngSubmit)` fires.
 
+[1.1.0]: https://github.com/NickErmol/TaskManager/releases/tag/v1.1.0
 [1.0.0]: https://github.com/NickErmol/TaskManager/releases/tag/v1.0.0
