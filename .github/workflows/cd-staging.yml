@@ -22,7 +22,7 @@ jobs:
           - { name: notifications, dockerfile: src/services/notifications/TaskManager.Notifications/Dockerfile }
           - { name: analytics,     dockerfile: src/services/analytics/TaskManager.Analytics/Dockerfile }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       # GHCR rejects mixed-case repository names; the owner (github.repository_owner)
       # can contain capitals, so lowercase it here. Workflow-expression context has no
       # lowercase function — do it in bash and override IMAGE_PREFIX for later steps.
@@ -30,13 +30,13 @@ jobs:
         run: echo "IMAGE_PREFIX=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/smart-task-manager" >> "$GITHUB_ENV"
       # The gha cache backend (cache-to: type=gha) needs the buildx container
       # driver; the default docker driver can't export a cache and the build fails.
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v5
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.service.dockerfile }}
@@ -54,12 +54,12 @@ jobs:
     # gate on the backend job so CD stays green instead of failing on empty secrets.
     if: vars.VERCEL_DEPLOY_ENABLED == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       # hashFiles() is not available in job-level `if` — gate on a step output instead.
       - name: Check frontend exists
         id: frontend
         run: echo "exists=$([ -f frontend/task-manager-app/package.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         if: steps.frontend.outputs.exists == 'true'
         with:
           node-version: '22'
