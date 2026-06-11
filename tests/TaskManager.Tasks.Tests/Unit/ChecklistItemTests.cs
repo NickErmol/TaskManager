@@ -33,6 +33,10 @@ public class ChecklistItemTests
 
         item.IsDone.Should().BeTrue();
         item.Title.Should().Be("final draft");
+
+        // SetDone is an idempotent setter, not a toggle: the false path must work too.
+        item.SetDone(false);
+        item.IsDone.Should().BeFalse();
     }
 
     [Fact]

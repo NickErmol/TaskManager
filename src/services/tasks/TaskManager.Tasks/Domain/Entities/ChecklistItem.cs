@@ -22,7 +22,6 @@ public class ChecklistItem
             Id = Guid.NewGuid(),
             TaskItemId = taskItemId,
             Title = title,
-            IsDone = false,
             Position = position,
             CreatedAt = DateTimeOffset.UtcNow,
         };
