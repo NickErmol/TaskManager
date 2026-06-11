@@ -61,7 +61,7 @@ public static class TaskEndpoints
             var result = await mediator.Send(new DeleteTaskCommand(id, userId), ct);
             if (result.IsFailed) return result.ToResult().ToHttpResult();
             _ = broadcaster.TaskDeletedAsync(result.Value, id, userId)
-                .ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+                .ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
             return Results.NoContent();
         });
 
@@ -92,7 +92,7 @@ public static class TaskEndpoints
                 var task = await mediator.Send(new GetTaskQuery(id, userId), ct);
                 if (task.IsSuccess)
                     _ = broadcaster.TaskUpsertedAsync(task.Value.BoardId, task.Value, userId)
-                        .ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+                        .ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
             }
             return result.ToHttpResult();
         });
@@ -108,7 +108,7 @@ public static class TaskEndpoints
                 var task = await mediator.Send(new GetTaskQuery(id, userId), ct);
                 if (task.IsSuccess)
                     _ = broadcaster.TaskUpsertedAsync(task.Value.BoardId, task.Value, userId)
-                        .ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+                        .ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
             }
             return result.ToHttpResult();
         });
@@ -122,7 +122,7 @@ public static class TaskEndpoints
                 var task = await mediator.Send(new GetTaskQuery(id, userId), ct);
                 if (task.IsSuccess)
                     _ = broadcaster.TaskUpsertedAsync(task.Value.BoardId, task.Value, userId)
-                        .ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+                        .ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
             }
             return result.ToHttpResult();
         });
@@ -171,7 +171,7 @@ public static class TaskEndpoints
         // Best-effort, fire-after-commit. A missed frame self-heals on reload, so never let a
         // hub hiccup fail the HTTP response: fire-and-forget with an unobserved-exception guard.
         _ = broadcaster.TaskUpsertedAsync(result.Value.BoardId, result.Value, actorId)
-            .ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+            .ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
         return Results.Ok(result.Value);
     }
 
