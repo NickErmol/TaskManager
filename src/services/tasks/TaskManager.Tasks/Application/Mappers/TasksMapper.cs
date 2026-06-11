@@ -11,12 +11,15 @@ public class TasksMapper
 
     public CommentDto ToDto(TaskComment c) => new(c.Id, c.TaskId, c.AuthorId, c.Body, c.CreatedAt, c.EditedAt);
 
+    public ChecklistItemDto ToDto(ChecklistItem c) => new(c.Id, c.Title, c.IsDone, c.Position);
+
     public TaskDto ToDto(TaskItem t) => new(
         t.Id, t.BoardId, t.Title, t.Description,
         t.Status.ToString(), t.Priority.ToString(), t.CreatedBy, t.AssignedTo,
         t.DueDate, t.Position, t.CreatedAt, t.UpdatedAt, t.RowVersion,
         t.Labels.Select(l => l.LabelId).ToList(),
-        t.Comments.OrderBy(c => c.CreatedAt).Select(ToDto).ToList());
+        t.Comments.OrderBy(c => c.CreatedAt).Select(ToDto).ToList(),
+        t.Checklist.OrderBy(c => c.Position).Select(ToDto).ToList());
 
     public BoardDto ToDto(Board b) => new(
         b.Id, b.Name, b.Description, b.OwnerId, b.CreatedAt,
