@@ -48,11 +48,15 @@ public class DeleteAttachmentCommandHandler(
         var att = task.Attachments.FirstOrDefault(a => a.Id == cmd.AttachmentId);
         if (att is null) return Result.Fail("not found: attachment");
 
-        await storage.DeleteAsync(att.StorageKey, ct);
+        // Capture the key before removal; commit the DB change (+ outbox event) FIRST, then
+        // delete the blob. If the blob delete fails we leave a harmless orphaned object rather
+        // than a dangling DB row whose download would 404 — same benign failure mode as upload.
+        var storageKey = att.StorageKey;
         task.RemoveAttachment(att.Id);
         await publisher.PublishAsync(new AttachmentRemovedEvent(
             task.Id, task.BoardId, att.Id, cmd.UserId, att.FileName, task.Title, DateTimeOffset.UtcNow), ct);
         await uow.SaveChangesAsync(ct);
+        await storage.DeleteAsync(storageKey, ct);
         return Result.Ok(mapper.ToDto(task));
     }
 }

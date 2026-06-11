@@ -85,6 +85,7 @@ public class AttachmentCommandHandlerTests
         result.Value.Attachments.Should().BeEmpty();
         await _storage.Received(1).DeleteAsync("the-key", Arg.Any<CancellationToken>());
         await _publisher.Received(1).PublishAsync(Arg.Any<AttachmentRemovedEvent>(), Arg.Any<CancellationToken>());
+        await _uow.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
