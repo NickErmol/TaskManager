@@ -123,6 +123,8 @@ export class TaskDetailComponent {
   readonly error = signal<string | null>(null);
   readonly isSaving = signal(false);
   readonly selectedAssignee = signal<UserDto | null>(null);
+  /** Label toggles bump the task's RowVersion server-side; track the freshest one so a later Save doesn't 409. */
+  private rowVersion = this.data.task.rowVersion;
   readonly labelIds = signal<string[]>([...this.data.task.labelIds]);
   readonly labelsChanged = signal(false);
 
@@ -139,6 +141,7 @@ export class TaskDetailComponent {
         ? await firstValueFrom(this.tasksApi.attachLabel(this.data.task.id, labelId))
         : await firstValueFrom(this.tasksApi.detachLabel(this.data.task.id, labelId));
       this.labelIds.set(updated.labelIds);
+      this.rowVersion = updated.rowVersion;
       this.labelsChanged.set(true);
     } catch {
       this.error.set(attach ? 'Could not add the label.' : 'Could not remove the label.');
@@ -183,7 +186,7 @@ export class TaskDetailComponent {
             priority: value.priority,
             dueDate: value.dueDate.length > 0 ? new Date(value.dueDate).toISOString() : null,
           },
-          this.data.task.rowVersion,
+          this.rowVersion,
         ),
       );
 
