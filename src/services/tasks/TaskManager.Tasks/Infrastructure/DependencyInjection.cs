@@ -50,7 +50,7 @@ public static class DependencyInjection
 
         // --- Object storage (MinIO / S3) for attachments ---
         var s3Endpoint = config["S3_ENDPOINT"] ?? throw new InvalidOperationException("S3_ENDPOINT is not configured");
-        var s3Bucket = config["S3_BUCKET"] ?? "task-attachments";
+        var s3Bucket = config["S3_BUCKET"] ?? "task-attachments"; // intentional default: bucket name is not a secret; credential/endpoint reads above throw on missing
         var s3Key = config["S3_ACCESS_KEY"] ?? throw new InvalidOperationException("S3_ACCESS_KEY is not configured");
         var s3Secret = config["S3_SECRET_KEY"] ?? throw new InvalidOperationException("S3_SECRET_KEY is not configured");
 
