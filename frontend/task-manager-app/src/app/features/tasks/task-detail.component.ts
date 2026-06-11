@@ -113,6 +113,7 @@ const PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Critical'];
                 <input
                   type="checkbox"
                   data-testid="checklist-toggle"
+                  [attr.aria-label]="(item.isDone ? 'Mark incomplete' : 'Mark complete') + ': ' + item.title"
                   [checked]="item.isDone"
                   (change)="toggleItem(item)"
                 />
