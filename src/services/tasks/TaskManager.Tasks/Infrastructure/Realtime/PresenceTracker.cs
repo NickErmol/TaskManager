@@ -56,6 +56,7 @@ public class PresenceTracker : IPresenceTracker
                 }
                 if (!touched) continue;
                 if (users.Count == 0) _boards.Remove(boardId);
+                // Report the board even when it just emptied, so the caller broadcasts the empty viewer list.
                 affected.Add((boardId, users.Keys.ToList()));
             }
             return affected;
