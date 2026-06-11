@@ -25,8 +25,8 @@ jobs:
           - tests/TaskManager.Analytics.Tests
           - tests/TaskManager.Gateway.Tests
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
       - name: Restore
@@ -37,13 +37,13 @@ jobs:
   test-angular:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       # hashFiles() is not available in job-level `if`, so gate on a step output instead.
       # The frontend arrives in Step 2b; until then every later step is skipped.
       - name: Check frontend exists
         id: frontend
         run: echo "exists=$([ -f frontend/task-manager-app/package.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         if: steps.frontend.outputs.exists == 'true'
         with:
           node-version: '22'
