@@ -59,17 +59,17 @@ public class UpdateTaskCommandHandler(ITaskRepository tasks, IBoardRepository bo
 }
 
 public class DeleteTaskCommandHandler(ITaskRepository tasks, IBoardRepository boards, IUnitOfWork uow)
-    : IRequestHandler<DeleteTaskCommand, Result>
+    : IRequestHandler<DeleteTaskCommand, Result<Guid>>
 {
-    public async ValueTask<Result> Handle(DeleteTaskCommand cmd, CancellationToken ct)
+    public async ValueTask<Result<Guid>> Handle(DeleteTaskCommand cmd, CancellationToken ct)
     {
         var task = await tasks.GetByIdAsync(cmd.TaskId, ct);
-        if (task is null) return Result.Fail("not found: task");
+        if (task is null) return Result.Fail<Guid>("not found: task");
         if (!TaskAccess.CanEdit(await boards.GetMemberRoleAsync(task.BoardId, cmd.UserId, ct)))
-            return Result.Fail(TaskAccess.EditorRequired);
+            return Result.Fail<Guid>(TaskAccess.EditorRequired);
         tasks.Remove(task);
         await uow.SaveChangesAsync(ct);
-        return Result.Ok();
+        return Result.Ok(task.BoardId);
     }
 }
 

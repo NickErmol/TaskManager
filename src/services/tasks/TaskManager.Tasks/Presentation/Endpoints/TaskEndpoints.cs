@@ -57,7 +57,8 @@ public static class TaskEndpoints
         group.MapDelete("/{id:guid}", async (Guid id, HttpContext http, IMediator mediator, CancellationToken ct) =>
         {
             if (http.GetUserId() is not { } userId) return Results.Unauthorized();
-            return (await mediator.Send(new DeleteTaskCommand(id, userId), ct)).ToHttpResult();
+            var result = await mediator.Send(new DeleteTaskCommand(id, userId), ct);
+            return result.IsSuccess ? Results.NoContent() : result.ToResult().ToHttpResult();
         });
 
         group.MapPost("/{id:guid}/move", async (Guid id, MoveTaskRequest req, HttpContext http, IMediator mediator, CancellationToken ct) =>
