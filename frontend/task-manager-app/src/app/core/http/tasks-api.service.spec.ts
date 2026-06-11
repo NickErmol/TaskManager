@@ -67,4 +67,25 @@ describe('TasksApiService', () => {
     expect(req.request.headers.get('If-Match')).toBe('"5"');
     req.flush(task);
   });
+
+  it('attachLabel() issues POST /api/tasks/{id}/labels/{labelId} without If-Match', () => {
+    const task = makeTask();
+
+    service.attachLabel(task.id, 'label-1').subscribe();
+
+    const req = http.expectOne(apiUrl(`/api/tasks/${task.id}/labels/label-1`));
+    expect(req.request.method).toBe('POST');
+    expect(req.request.headers.has('If-Match')).toBe(false);
+    req.flush(task);
+  });
+
+  it('detachLabel() issues DELETE /api/tasks/{id}/labels/{labelId}', () => {
+    const task = makeTask();
+
+    service.detachLabel(task.id, 'label-1').subscribe();
+
+    const req = http.expectOne(apiUrl(`/api/tasks/${task.id}/labels/label-1`));
+    expect(req.request.method).toBe('DELETE');
+    req.flush(task);
+  });
 });

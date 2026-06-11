@@ -3,7 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { BoardsApiService } from './boards-api.service';
 import { apiUrl } from './api-base';
-import { makeBoard, makeBoardDetail } from '../../testing/factories';
+import { makeBoard, makeBoardDetail, makeLabel } from '../../testing/factories';
 
 describe('BoardsApiService', () => {
   let service: BoardsApiService;
@@ -52,5 +52,24 @@ describe('BoardsApiService', () => {
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({ name: 'Sprint 1', description: 'June' });
     req.flush(created);
+  });
+
+  it('createLabel() issues POST /api/boards/{id}/labels with the request body', () => {
+    const label = makeLabel({ name: 'bug', color: '#ef4444' });
+
+    service.createLabel(label.boardId, { name: 'bug', color: '#ef4444' }).subscribe();
+
+    const req = http.expectOne(apiUrl(`/api/boards/${label.boardId}/labels`));
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ name: 'bug', color: '#ef4444' });
+    req.flush(label);
+  });
+
+  it('deleteLabel() issues DELETE /api/boards/{id}/labels/{labelId}', () => {
+    service.deleteLabel('board-1', 'label-1').subscribe();
+
+    const req = http.expectOne(apiUrl('/api/boards/board-1/labels/label-1'));
+    expect(req.request.method).toBe('DELETE');
+    req.flush(null);
   });
 });
