@@ -2,7 +2,9 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using TaskManager.Contracts.Events;
 using TaskManager.Analytics.Application;
+using TaskManager.Analytics.Application.Interfaces;
 using TaskManager.Analytics.Domain.Interfaces;
+using TaskManager.Analytics.Infrastructure.Http;
 using TaskManager.Analytics.Infrastructure.Messaging;
 using TaskManager.Analytics.Infrastructure.Persistence;
 
@@ -26,6 +28,10 @@ public static class DependencyInjection
         services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
         services.AddScoped<EventProjector>();
         services.AddScoped<AnalyticsQueryService>();
+
+        var tasksUrl = config["TASKS_URL"] ?? "http://tasks-svc:8080";
+        services.AddHttpClient<IBoardMembershipChecker, TasksBoardMembershipChecker>(c =>
+            c.BaseAddress = new Uri(tasksUrl));
 
         var rabbitUrl = config["RABBITMQ_URL"] ?? "rabbitmq://guest:guest@localhost:5672";
 
