@@ -55,6 +55,8 @@ public static class DependencyInjection
     private static void ConfigureTopology(IRabbitMqBusFactoryConfigurator cfg)
     {
         MapEvent<TaskCreatedEvent>(cfg, "task.created");
+        MapEvent<TaskUpdatedEvent>(cfg, "task.updated");
+        MapEvent<TaskDeletedEvent>(cfg, "task.deleted");
         MapEvent<TaskAssignedEvent>(cfg, "task.assigned");
         MapEvent<TaskStatusChangedEvent>(cfg, "task.status-changed");
         MapEvent<TaskCompletedEvent>(cfg, "task.completed");

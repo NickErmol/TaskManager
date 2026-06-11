@@ -104,4 +104,63 @@ public class EventProjectorTests
         _addedEvents.Should().BeEmpty();
         await _uow.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task ProjectAsync_TaskAssigned_RecordsActorAsAssigner_NotAssignee()
+    {
+        var assignedTo = Guid.NewGuid();
+        var assignedBy = Guid.NewGuid();
+        var e = new TaskAssignedEvent(Guid.NewGuid(), Guid.NewGuid(), "Ship it", assignedTo, assignedBy, null);
+
+        await _sut.ProjectAsync(e, default);
+
+        var captured = _addedEvents.Should().ContainSingle().Subject;
+        captured.UserId.Should().Be(assignedTo, "user activity keeps the assignee");
+        captured.ActorId.Should().Be(assignedBy, "the board feed actor is the assigner");
+        captured.TaskTitle.Should().Be("Ship it");
+    }
+
+    [Fact]
+    public async Task ProjectAsync_TaskUpdated_RecordsActorAndTitle()
+    {
+        var actor = Guid.NewGuid();
+        var when = DateTimeOffset.UtcNow;
+        var e = new TaskUpdatedEvent(Guid.NewGuid(), Guid.NewGuid(), "Renamed", actor, when);
+
+        await _sut.ProjectAsync(e, default);
+
+        var captured = _addedEvents.Should().ContainSingle().Subject;
+        captured.EventType.Should().Be("task.updated");
+        captured.ActorId.Should().Be(actor);
+        captured.TaskTitle.Should().Be("Renamed");
+        captured.OccurredAt.Should().Be(when);
+        await _uow.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProjectAsync_TaskDeleted_RecordsDeletion()
+    {
+        var actor = Guid.NewGuid();
+        var e = new TaskDeletedEvent(Guid.NewGuid(), Guid.NewGuid(), "Gone", actor, DateTimeOffset.UtcNow);
+
+        await _sut.ProjectAsync(e, default);
+
+        var captured = _addedEvents.Should().ContainSingle().Subject;
+        captured.EventType.Should().Be("task.deleted");
+        captured.ActorId.Should().Be(actor);
+        captured.TaskTitle.Should().Be("Gone");
+    }
+
+    [Fact]
+    public async Task ProjectAsync_TaskCreated_RecordsActorAndTitle()
+    {
+        var creator = Guid.NewGuid();
+        var e = new TaskCreatedEvent(Guid.NewGuid(), Guid.NewGuid(), "Born", creator, DateTimeOffset.UtcNow);
+
+        await _sut.ProjectAsync(e, default);
+
+        var captured = _addedEvents.Should().ContainSingle().Subject;
+        captured.ActorId.Should().Be(creator);
+        captured.TaskTitle.Should().Be("Born");
+    }
 }

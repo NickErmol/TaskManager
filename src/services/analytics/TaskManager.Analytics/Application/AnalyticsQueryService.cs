@@ -8,6 +8,7 @@ public class AnalyticsQueryService(IAnalyticsRepository repository)
 {
     private const int TrendDays = 30;
     private const int ActivityCount = 30;
+    private const int MaxBoardActivity = 100;
 
     public async Task<BoardSummaryDto> GetBoardSummaryAsync(Guid boardId, CancellationToken ct = default)
     {
@@ -49,6 +50,16 @@ public class AnalyticsQueryService(IAnalyticsRepository repository)
         var events = await repository.GetUserEventsAsync(userId, ActivityCount, ct);
         return events
             .Select(e => new ActivityItemDto(e.EventType, e.TaskId, e.BoardId, e.OccurredAt))
+            .ToList();
+    }
+
+    /// <summary>Newest-first board activity, count clamped to [1, 100].</summary>
+    public async Task<IReadOnlyList<BoardActivityItemDto>> GetBoardActivityAsync(Guid boardId, int count, CancellationToken ct = default)
+    {
+        var clamped = Math.Clamp(count, 1, MaxBoardActivity);
+        var events = await repository.GetBoardActivityAsync(boardId, clamped, ct);
+        return events
+            .Select(e => new BoardActivityItemDto(e.EventType, e.TaskId, e.TaskTitle, e.ActorId, e.OccurredAt))
             .ToList();
     }
 }

@@ -1,9 +1,10 @@
 import { inject, Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { apiUrl } from './api-base';
 import {
   ActivityItemDto,
+  BoardActivityItemDto,
   BoardSummaryDto,
   CompletionTrendPointDto,
   UserSummaryDto,
@@ -27,5 +28,12 @@ export class AnalyticsApiService {
 
   getMyActivity(): Observable<ActivityItemDto[]> {
     return this.http.get<ActivityItemDto[]>(apiUrl('/api/analytics/users/me/activity'));
+  }
+
+  getBoardActivity(boardId: string, count = 50): Observable<BoardActivityItemDto[]> {
+    return this.http.get<BoardActivityItemDto[]>(
+      apiUrl(`/api/analytics/boards/${boardId}/activity`),
+      { params: new HttpParams().set('count', count) },
+    );
   }
 }

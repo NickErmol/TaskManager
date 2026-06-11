@@ -58,4 +58,11 @@ public class AnalyticsRepository(AnalyticsDbContext db) : IAnalyticsRepository
             .OrderByDescending(e => e.OccurredAt)
             .Take(count)
             .ToListAsync(ct);
+
+    public Task<List<TaskEventRecord>> GetBoardActivityAsync(Guid boardId, int count, CancellationToken ct = default)
+        => db.TaskEvents.AsNoTracking()
+            .Where(e => e.BoardId == boardId)
+            .OrderByDescending(e => e.OccurredAt)
+            .Take(count)
+            .ToListAsync(ct);
 }

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TaskManager.Analytics.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using TaskManager.Analytics.Infrastructure.Persistence;
 namespace TaskManager.Analytics.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AnalyticsDbContext))]
-    partial class AnalyticsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260611125409_AddActivityColumns")]
+    partial class AddActivityColumns
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

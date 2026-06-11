@@ -18,8 +18,10 @@ public class AnalyticsDbContext(DbContextOptions<AnalyticsDbContext> options) : 
             e.ToTable("task_events");
             e.HasKey(x => x.Id);
             e.Property(x => x.EventType).HasMaxLength(64);
+            e.Property(x => x.TaskTitle).HasMaxLength(200);
             e.HasIndex(x => new { x.BoardId, x.EventType, x.OccurredAt });
             e.HasIndex(x => new { x.UserId, x.OccurredAt });
+            e.HasIndex(x => new { x.BoardId, x.OccurredAt });
         });
         modelBuilder.Entity<BoardStats>(e =>
         {

@@ -9,5 +9,7 @@ public class TaskEventRecord
     public Guid BoardId { get; set; }
     public string EventType { get; set; } = default!;
     public Guid UserId { get; set; }
+    public Guid ActorId { get; set; }
+    public string? TaskTitle { get; set; }
     public DateTimeOffset OccurredAt { get; set; }
 }

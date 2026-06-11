@@ -1,5 +1,6 @@
 import {
   ActivityItemDto,
+  BoardActivityItemDto,
   BoardDetailDto,
   BoardDto,
   ChecklistItemDto,
@@ -95,6 +96,15 @@ export const makeActivity = (overrides: Partial<ActivityItemDto> = {}): Activity
   eventType: 'TaskCreated',
   taskId: nextGuid(),
   boardId: nextGuid(),
+  occurredAt: '2026-06-01T00:00:00Z',
+  ...overrides,
+});
+
+export const makeBoardActivity = (overrides: Partial<BoardActivityItemDto> = {}): BoardActivityItemDto => ({
+  eventType: 'task.updated',
+  taskId: nextGuid(),
+  taskTitle: 'A task',
+  actorId: nextGuid(),
   occurredAt: '2026-06-01T00:00:00Z',
   ...overrides,
 });

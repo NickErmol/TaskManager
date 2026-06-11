@@ -1,5 +1,5 @@
 import { CdkDrag, CdkDragDrop, CdkDropList, CdkDropListGroup } from '@angular/cdk/drag-drop';
-import { ChangeDetectionStrategy, Component, computed, inject, OnDestroy, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
@@ -15,6 +15,7 @@ import { TaskFormComponent } from '../tasks/task-form.component';
 import { TASK_STATUSES, TaskDto, TaskStatus } from '../../core/models';
 import { BoardRealtimeService } from '../../core/realtime';
 import { PresenceAvatarsComponent, TaskCardComponent } from '../../shared/components';
+import { BoardActivityPanelComponent } from './board-activity-panel.component';
 
 const COLUMN_LABELS: Record<TaskStatus, string> = {
   Todo: 'Todo',
@@ -39,6 +40,7 @@ const COLUMN_LABELS: Record<TaskStatus, string> = {
     TaskCardComponent,
     BoardFilterBarComponent,
     PresenceAvatarsComponent,
+    BoardActivityPanelComponent,
   ],
   template: `
     <main class="p-6">
@@ -106,6 +108,8 @@ const COLUMN_LABELS: Record<TaskStatus, string> = {
           </section>
         }
       </div>
+
+      <tm-board-activity-panel class="mt-6 block" [boardId]="boardId" [refreshSignal]="activityTick()" />
     </main>
   `,
 })
@@ -120,7 +124,8 @@ export class BoardDetailComponent implements OnInit, OnDestroy {
   protected readonly otherViewerIds = computed(() =>
     this.realtime.viewers().filter((id) => id !== this.authStore.user()?.id));
 
-  private readonly boardId = this.route.snapshot.paramMap.get('id') ?? '';
+  protected readonly boardId = this.route.snapshot.paramMap.get('id') ?? '';
+  protected readonly activityTick = signal(0);
 
   /** Unfiltered columns — the source of truth for drag-drop position math. */
   protected readonly realColumns = computed(() => {
@@ -164,9 +169,9 @@ export class BoardDetailComponent implements OnInit, OnDestroy {
     if (Object.keys(restored).length > 0) this.store.setFilter(restored);
 
     void this.realtime.join(this.boardId, {
-      onUpsert: (task) => this.store.applyRealtimeUpsert(task),
-      onDelete: (taskId) => this.store.applyRealtimeDelete(taskId),
-      onReconnected: () => void this.store.loadBoard(this.boardId),
+      onUpsert: (task) => { this.store.applyRealtimeUpsert(task); this.activityTick.update((n) => n + 1); },
+      onDelete: (taskId) => { this.store.applyRealtimeDelete(taskId); this.activityTick.update((n) => n + 1); },
+      onReconnected: () => { void this.store.loadBoard(this.boardId); this.activityTick.update((n) => n + 1); },
     });
   }
 

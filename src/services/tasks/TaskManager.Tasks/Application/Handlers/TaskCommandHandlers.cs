@@ -38,7 +38,7 @@ public class CreateTaskCommandHandler(ITaskRepository tasks, IBoardRepository bo
     }
 }
 
-public class UpdateTaskCommandHandler(ITaskRepository tasks, IBoardRepository boards, IUnitOfWork uow, TasksMapper mapper)
+public class UpdateTaskCommandHandler(ITaskRepository tasks, IBoardRepository boards, IUnitOfWork uow, IEventPublisher publisher, TasksMapper mapper)
     : IRequestHandler<UpdateTaskCommand, Result<TaskDto>>
 {
     public async ValueTask<Result<TaskDto>> Handle(UpdateTaskCommand cmd, CancellationToken ct)
@@ -52,13 +52,14 @@ public class UpdateTaskCommandHandler(ITaskRepository tasks, IBoardRepository bo
             return Result.Fail("Priority must be one of: Low, Medium, High, Critical");
 
         task.Update(cmd.Title, cmd.Description, priority, cmd.DueDate);
+        await publisher.PublishAsync(new TaskUpdatedEvent(task.Id, task.BoardId, task.Title, cmd.UserId, DateTimeOffset.UtcNow), ct);
         try { await uow.SaveChangesAsync(ct); }
         catch (ConcurrencyConflictException) { return Result.Fail(TaskAccess.Conflict); }
         return Result.Ok(mapper.ToDto(task));
     }
 }
 
-public class DeleteTaskCommandHandler(ITaskRepository tasks, IBoardRepository boards, IUnitOfWork uow)
+public class DeleteTaskCommandHandler(ITaskRepository tasks, IBoardRepository boards, IUnitOfWork uow, IEventPublisher publisher)
     : IRequestHandler<DeleteTaskCommand, Result<Guid>>
 {
     public async ValueTask<Result<Guid>> Handle(DeleteTaskCommand cmd, CancellationToken ct)
@@ -68,6 +69,7 @@ public class DeleteTaskCommandHandler(ITaskRepository tasks, IBoardRepository bo
         if (!TaskAccess.CanEdit(await boards.GetMemberRoleAsync(task.BoardId, cmd.UserId, ct)))
             return Result.Fail<Guid>(TaskAccess.EditorRequired);
         tasks.Remove(task);
+        await publisher.PublishAsync(new TaskDeletedEvent(task.Id, task.BoardId, task.Title, cmd.UserId, DateTimeOffset.UtcNow), ct);
         await uow.SaveChangesAsync(ct);
         return Result.Ok(task.BoardId);
     }

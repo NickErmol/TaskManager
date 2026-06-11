@@ -1744,3 +1744,36 @@ applies `TaskUpserted` only when `rowVersion` is **strictly newer** than the loc
 (drops stale frames and the echo of the user's own optimistic write); `TaskDeleted` removes the
 card; on reconnect the board is refetched once. Presence avatars (initials chips, "+n" overflow)
 render in the board header and show **only other viewers**, not yourself.
+
+### 13.4 Per-board activity feed (Feature 4)
+A live, per-board audit trail in a collapsible panel on board detail.
+
+**Events** — two additive contract events, `TaskUpdatedEvent` and `TaskDeletedEvent`
+(`TaskId, BoardId, Title, ActorId, OccurredAt`), published by Tasks' update/delete handlers
+via the existing outbox and bound on the topic exchange (`task.updated` / `task.deleted`).
+The five existing task events are **not reshaped** — they already carry an actor and a title,
+so there is no breaking change to the Notifications consumers.
+
+**Projection — reuses `task_events`** (no separate `board_activity` table). Two columns are
+added: `ActorId` (the *performer*; distinct from `UserId`, which for `task.assigned` stays the
+assignee so "assigned to me" user-activity is unchanged) and `TaskTitle`. The existing
+inbox-dedup `EventProjector` populates them for every event type. No physical retention/trim:
+`task_events` is already the unbounded log that powers the completion trend (which needs 30
+days of `task.completed`), so the feed instead **query-limits** to the requested count.
+
+**Endpoint** — `GET /api/analytics/boards/{boardId}/activity?count=50` (count clamped to
+[1, 100], newest first). **Membership** is enforced by Analytics calling Tasks
+`GET /api/boards/{boardId}` with the caller's `X-User-Id` (Tasks REST trusts that header; it
+does not validate bearers — this refines the design's "forward the bearer"); 200 ⇒ member,
+otherwise 403. `IBoardMembershipChecker` (Application port) + typed `HttpClient` adapter
+(base address `TASKS_URL`) keep Analytics free of a membership table and of Identity coupling.
+Since Analytics registers no auth scheme, the endpoint returns a deterministic
+`Results.StatusCode(403)` (not `Results.Forbid()`).
+
+**SPA** — a collapsible panel on board detail loads the feed and reloads when a Feature-3
+`TaskUpserted`/`TaskDeleted` frame arrives (a tick signal), plus a manual refresh button. Actor
+display names resolve client-side via a memoizing cache over Identity `GET /api/users/{id}`.
+The feed is eventually consistent (outbox → RabbitMQ → projection), so it may trail the hub
+frame by a moment — the reload happens on the signal and the manual control covers the gap.
+
+This completes v1.1; the release is cut as `release/1.1.0` → tag `v1.1.0`.
