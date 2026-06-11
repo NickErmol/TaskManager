@@ -55,13 +55,13 @@ describe('BoardsApiService', () => {
   });
 
   it('createLabel() issues POST /api/boards/{id}/labels with the request body', () => {
-    const label = makeLabel({ name: 'bug', color: '#ef4444' });
+    const label = makeLabel({ name: 'urgent', color: '#3b82f6' });
 
-    service.createLabel(label.boardId, { name: 'bug', color: '#ef4444' }).subscribe();
+    service.createLabel(label.boardId, { name: 'urgent', color: '#3b82f6' }).subscribe();
 
     const req = http.expectOne(apiUrl(`/api/boards/${label.boardId}/labels`));
     expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual({ name: 'bug', color: '#ef4444' });
+    expect(req.request.body).toEqual({ name: 'urgent', color: '#3b82f6' });
     req.flush(label);
   });
 
