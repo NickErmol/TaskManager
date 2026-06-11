@@ -99,6 +99,30 @@ public class BoardAndTaskFlowTests(PlaywrightFixture fixture)
             .ToBeVisibleAsync();
     }
 
+    [Fact]
+    public async Task Filtering_by_label_shows_only_matching_cards()
+    {
+        var page = await NewBoardPageAsync();
+        await Flows.CreateTaskAsync(page, "Tagged task");
+        await Flows.CreateTaskAsync(page, "Plain task");
+
+        await Flows.CreateLabelAsync(page, "urgent");
+        await Flows.ToggleTaskLabelAsync(page, "Tagged task", "urgent");
+
+        // filter by the label
+        await page.Locator("[data-testid='filter-label']", new() { HasText = "urgent" }).ClickAsync();
+        await Assertions.Expect(Flows.TaskCard(page, "Plain task")).ToBeHiddenAsync();
+        await Assertions.Expect(Flows.TaskCard(page, "Tagged task")).ToBeVisibleAsync();
+        await Assertions.Expect(page.GetByTestId("filter-count")).ToContainTextAsync("1 of 2");
+
+        // the filter round-trips through the URL
+        page.Url.Should().Contain("labels=");
+
+        // clear restores everything
+        await page.GetByTestId("filter-clear").ClickAsync();
+        await Assertions.Expect(Flows.TaskCard(page, "Plain task")).ToBeVisibleAsync();
+    }
+
     private async Task<IPage> NewBoardPageAsync()
     {
         var page = await fixture.NewPageAsync();

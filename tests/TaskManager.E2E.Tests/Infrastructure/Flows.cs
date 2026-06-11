@@ -186,4 +186,26 @@ public static class Flows
         await dialog.GetByRole(AriaRole.Button, new() { Name = "Invite" }).ClickAsync();
         await dialog.WaitForAsync(new() { State = WaitForSelectorState.Detached });
     }
+
+    /// <summary>Creates a board label through the manage-labels dialog (first palette color).</summary>
+    public static async Task CreateLabelAsync(IPage page, string name)
+    {
+        await page.GetByTestId("manage-labels-button").ClickAsync();
+        var dialog = page.Locator("mat-dialog-container");
+        await dialog.GetByTestId("label-name-input").FillAsync(name);
+        await dialog.GetByTestId("create-label-button").ClickAsync();
+        await dialog.Locator("[data-testid='label-row']", new() { HasText = name }).WaitForAsync();
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Close" }).ClickAsync();
+        await dialog.WaitForAsync(new() { State = WaitForSelectorState.Detached });
+    }
+
+    /// <summary>Toggles a label on a task via the task dialog's label picker.</summary>
+    public static async Task ToggleTaskLabelAsync(IPage page, string taskTitle, string labelName)
+    {
+        await TaskCard(page, taskTitle).ClickAsync();
+        var dialog = page.Locator("mat-dialog-container");
+        await dialog.Locator("[data-testid='label-toggle']", new() { HasText = labelName }).ClickAsync();
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
+        await dialog.WaitForAsync(new() { State = WaitForSelectorState.Detached });
+    }
 }
