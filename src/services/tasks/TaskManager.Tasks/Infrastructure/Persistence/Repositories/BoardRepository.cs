@@ -12,6 +12,7 @@ public class BoardRepository(TasksDbContext db) : IBoardRepository
             .Include(b => b.Members)
             .Include(b => b.Labels)
             .Include(b => b.Tasks).ThenInclude(t => t.Labels)
+            .Include(b => b.Tasks).ThenInclude(t => t.Checklist)
             .FirstOrDefaultAsync(b => b.Id == id, ct);
 
     public Task<Board?> GetByIdWithTasksAsync(Guid id, CancellationToken ct = default)
