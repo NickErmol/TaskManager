@@ -2,6 +2,7 @@ import {
   ActivityItemDto,
   BoardDetailDto,
   BoardDto,
+  ChecklistItemDto,
   CompletionTrendPointDto,
   LabelDto,
   NotificationDto,
@@ -28,6 +29,7 @@ export const makeTask = (overrides: Partial<TaskDto> = {}): TaskDto => ({
   rowVersion: 1,
   labelIds: [],
   comments: [],
+  checklist: [],
   ...overrides,
 });
 
@@ -58,6 +60,14 @@ export const makeLabel = (overrides: Partial<LabelDto> = {}): LabelDto => ({
   boardId: nextGuid(),
   name: 'bug',
   color: '#ef4444',
+  ...overrides,
+});
+
+export const makeChecklistItem = (overrides: Partial<ChecklistItemDto> = {}): ChecklistItemDto => ({
+  id: nextGuid(),
+  title: 'A subtask',
+  isDone: false,
+  position: 0,
   ...overrides,
 });
 
