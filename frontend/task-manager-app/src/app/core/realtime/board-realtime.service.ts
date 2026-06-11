@@ -40,6 +40,8 @@ export class BoardRealtimeService {
     connection.on('PresenceChanged', (viewerIds: string[]) => this.viewers.set(viewerIds));
     // On reconnect, frames may have been missed while down — rejoin and let the caller refetch.
     connection.onreconnected(async () => {
+      // Guard against a leave()/join() that swapped the active connection while we were down.
+      if (this.connection !== connection) return;
       await connection.invoke('JoinBoard', boardId);
       handlers.onReconnected();
     });
