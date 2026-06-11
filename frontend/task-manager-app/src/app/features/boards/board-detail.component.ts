@@ -1,5 +1,5 @@
 import { CdkDrag, CdkDragDrop, CdkDropList, CdkDropListGroup } from '@angular/cdk/drag-drop';
-import { ChangeDetectionStrategy, Component, computed, inject, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
@@ -13,7 +13,8 @@ import { InviteMemberDialogComponent } from './invite-member-dialog.component';
 import { TaskDetailComponent } from '../tasks/task-detail.component';
 import { TaskFormComponent } from '../tasks/task-form.component';
 import { TASK_STATUSES, TaskDto, TaskStatus } from '../../core/models';
-import { TaskCardComponent } from '../../shared/components';
+import { BoardRealtimeService } from '../../core/realtime';
+import { PresenceAvatarsComponent, TaskCardComponent } from '../../shared/components';
 
 const COLUMN_LABELS: Record<TaskStatus, string> = {
   Todo: 'Todo',
@@ -37,6 +38,7 @@ const COLUMN_LABELS: Record<TaskStatus, string> = {
     MatIconModule,
     TaskCardComponent,
     BoardFilterBarComponent,
+    PresenceAvatarsComponent,
   ],
   template: `
     <main class="p-6">
@@ -45,6 +47,7 @@ const COLUMN_LABELS: Record<TaskStatus, string> = {
           <mat-icon>arrow_back</mat-icon>
         </a>
         <h1 class="text-2xl font-semibold text-slate-800">{{ store.currentBoard()?.name }}</h1>
+        <tm-presence-avatars [viewerIds]="viewerIds()" />
         <span class="flex-1"></span>
         <button mat-stroked-button type="button" data-testid="manage-labels-button" (click)="manageLabels()">
           <mat-icon>label</mat-icon>
@@ -106,12 +109,15 @@ const COLUMN_LABELS: Record<TaskStatus, string> = {
     </main>
   `,
 })
-export class BoardDetailComponent implements OnInit {
+export class BoardDetailComponent implements OnInit, OnDestroy {
   protected readonly store = inject(BoardsStore);
   private readonly route = inject(ActivatedRoute);
   private readonly dialog = inject(MatDialog);
   private readonly router = inject(Router);
   private readonly authStore = inject(AuthStore);
+  private readonly realtime = inject(BoardRealtimeService);
+
+  protected readonly viewerIds = this.realtime.viewers;
 
   private readonly boardId = this.route.snapshot.paramMap.get('id') ?? '';
 
@@ -155,6 +161,16 @@ export class BoardDetailComponent implements OnInit {
     if (priority === 'Low' || priority === 'Medium' || priority === 'High' || priority === 'Critical')
       restored.priority = priority;
     if (Object.keys(restored).length > 0) this.store.setFilter(restored);
+
+    void this.realtime.join(this.boardId, {
+      onUpsert: (task) => this.store.applyRealtimeUpsert(task),
+      onDelete: (taskId) => this.store.applyRealtimeDelete(taskId),
+      onReconnected: () => void this.store.loadBoard(this.boardId),
+    });
+  }
+
+  ngOnDestroy(): void {
+    void this.realtime.leave();
   }
 
   onDrop(event: CdkDragDrop<TaskDto[]>, newStatus: TaskStatus): void {

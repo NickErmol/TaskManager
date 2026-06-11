@@ -5,9 +5,11 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpErrorResponse } from '@angular/common/http';
 import { CdkDragDrop } from '@angular/cdk/drag-drop';
+import { signal } from '@angular/core';
 import { patchState } from '@ngrx/signals';
 import { of, throwError } from 'rxjs';
 import { BoardDetailComponent } from './board-detail.component';
+import { BoardRealtimeService } from '../../core/realtime';
 import { BoardsStore } from './boards.store';
 import { BoardsApiService } from '../../core/http/boards-api.service';
 import { TasksApiService } from '../../core/http/tasks-api.service';
@@ -34,6 +36,11 @@ describe('BoardDetailComponent', () => {
   };
   const tasksApi = { moveTask: jest.fn() };
   const snackBar = { open: jest.fn() };
+  const realtimeStub = {
+    viewers: signal<string[]>([]),
+    join: jest.fn().mockResolvedValue(undefined),
+    leave: jest.fn().mockResolvedValue(undefined),
+  };
 
   const dropEvent = (task: TaskDto, currentIndex = 0): CdkDragDrop<TaskDto[]> =>
     ({
@@ -57,6 +64,7 @@ describe('BoardDetailComponent', () => {
         { provide: BoardsApiService, useValue: boardsApi },
         { provide: TasksApiService, useValue: tasksApi },
         { provide: MatSnackBar, useValue: snackBar },
+        { provide: BoardRealtimeService, useValue: realtimeStub },
         {
           provide: ActivatedRoute,
           useValue: {
