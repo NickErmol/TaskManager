@@ -7,3 +7,5 @@ public record CompletionTrendPointDto(DateOnly Date, int Completed);
 public record UserSummaryDto(Guid UserId, int TasksCreated, int TasksCompleted, int TasksAssigned);
 
 public record ActivityItemDto(string EventType, Guid TaskId, Guid BoardId, DateTimeOffset OccurredAt);
+
+public record BoardActivityItemDto(string EventType, Guid TaskId, string? TaskTitle, Guid ActorId, DateTimeOffset OccurredAt);

@@ -22,4 +22,7 @@ public interface IAnalyticsRepository
         Guid boardId, string eventType, DateTimeOffset since, CancellationToken ct = default);
     /// <summary>Newest-first activity for a user.</summary>
     Task<List<TaskEventRecord>> GetUserEventsAsync(Guid userId, int count, CancellationToken ct = default);
+
+    /// <summary>Newest-first activity for a board (capped by <paramref name="count"/>).</summary>
+    Task<List<TaskEventRecord>> GetBoardActivityAsync(Guid boardId, int count, CancellationToken ct = default);
 }
