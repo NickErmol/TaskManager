@@ -4,6 +4,11 @@ All notable changes to Smart Task Manager are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- File attachments on tasks: upload/download/delete (≤10 MB, common types), stored in MinIO via the Tasks service. Proxied uploads, live board sync, and per-board activity-feed integration. (spec §13.5)
+
 ## [1.1.0] - 2026-06-11
 
 "Live Collaboration" release. Four features extending v1.0, each landing a v1.1
