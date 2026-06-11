@@ -91,6 +91,24 @@ public class ChecklistCommandHandlerTests
     }
 
     [Fact]
+    public async Task Update_AsViewer_ReturnsForbidden_WithoutLeakingItemExistence()
+    {
+        // Auth is checked before the item lookup, so a viewer probing a real item still
+        // sees "forbidden" rather than "not found" (no item-id probe via error message).
+        var task = Fake.Task(Guid.NewGuid());
+        var item = task.AddChecklistItem("secret");
+        var viewer = Guid.NewGuid();
+        _tasks.GetByIdAsync(task.Id, Arg.Any<CancellationToken>()).Returns(task);
+        SetRole(task.BoardId, viewer, BoardRole.Viewer);
+        var handler = new UpdateChecklistItemCommandHandler(_tasks, _boards, _uow, Mapper);
+
+        var result = await handler.Handle(
+            new UpdateChecklistItemCommand(task.Id, item.Id, "hacked", true, viewer), default);
+
+        result.Errors[0].Message.Should().StartWith("forbidden");
+    }
+
+    [Fact]
     public async Task Update_MissingItem_ReturnsNotFound()
     {
         var task = Fake.Task(Guid.NewGuid());

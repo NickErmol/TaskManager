@@ -30,10 +30,11 @@ public class UpdateChecklistItemCommandHandler(ITaskRepository tasks, IBoardRepo
     {
         var task = await tasks.GetByIdAsync(cmd.TaskId, ct);
         if (task is null) return Result.Fail("not found: task");
-        var item = task.Checklist.FirstOrDefault(i => i.Id == cmd.ItemId);
-        if (item is null) return Result.Fail("not found: checklist item");
+        // Authorize before resolving the item so a non-editor can't probe item IDs (matches Delete).
         if (!TaskAccess.CanEdit(await boards.GetMemberRoleAsync(task.BoardId, cmd.UserId, ct)))
             return Result.Fail(TaskAccess.EditorRequired);
+        var item = task.Checklist.FirstOrDefault(i => i.Id == cmd.ItemId);
+        if (item is null) return Result.Fail("not found: checklist item");
 
         if (cmd.Title is not null) item.Rename(cmd.Title);
         if (cmd.IsDone is not null) item.SetDone(cmd.IsDone.Value);
