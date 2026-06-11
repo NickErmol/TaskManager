@@ -23,3 +23,11 @@ export interface ActivityItemDto {
   boardId: string;
   occurredAt: string;
 }
+
+export interface BoardActivityItemDto {
+  eventType: string;
+  taskId: string;
+  taskTitle: string | null;
+  actorId: string;
+  occurredAt: string;
+}
