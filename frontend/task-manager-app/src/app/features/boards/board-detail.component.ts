@@ -116,7 +116,10 @@ export class BoardDetailComponent implements OnInit {
 
   protected openTask(task: TaskDto): void {
     this.dialog
-      .open(TaskDetailComponent, { data: { task }, width: '480px' })
+      .open(TaskDetailComponent, {
+        data: { task, boardLabels: this.store.currentBoard()?.labels ?? [] },
+        width: '480px',
+      })
       .afterClosed()
       .subscribe((changed) => {
         if (changed) void this.store.loadBoard(this.boardId);

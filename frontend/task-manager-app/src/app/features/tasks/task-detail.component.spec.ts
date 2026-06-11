@@ -25,7 +25,7 @@ describe('TaskDetailComponent', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideNoopAnimations(),
-        { provide: MAT_DIALOG_DATA, useValue: { task } },
+        { provide: MAT_DIALOG_DATA, useValue: { task, boardLabels: [] } },
         { provide: MatDialogRef, useValue: { close: jest.fn() } },
       ],
     }).compileComponents();

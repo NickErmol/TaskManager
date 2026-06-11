@@ -9,12 +9,13 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { debounceTime, distinctUntilChanged, firstValueFrom, of, switchMap } from 'rxjs';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { TaskDto, TaskPriority, UserDto } from '../../core/models';
+import { LabelDto, TaskDto, TaskPriority, UserDto } from '../../core/models';
 import { TasksApiService } from '../../core/http/tasks-api.service';
 import { UsersApiService } from '../../core/http/users-api.service';
 
 export interface TaskDetailDialogData {
   task: TaskDto;
+  boardLabels: LabelDto[];
 }
 
 const PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Critical'];
@@ -73,6 +74,26 @@ const PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Critical'];
           </mat-autocomplete>
         </mat-form-field>
 
+        @if (data.boardLabels.length > 0) {
+          <div class="flex flex-col gap-1">
+            <span class="text-sm font-medium text-slate-600">Labels</span>
+            <div class="flex flex-wrap gap-1">
+              @for (label of data.boardLabels; track label.id) {
+                <button
+                  type="button"
+                  data-testid="label-toggle"
+                  class="rounded-full px-2 py-0.5 text-xs font-medium"
+                  [style.background-color]="hasLabel(label.id) ? label.color : '#e2e8f0'"
+                  [style.color]="hasLabel(label.id) ? 'white' : '#475569'"
+                  (click)="toggleLabel(label.id)"
+                >
+                  {{ label.name }}
+                </button>
+              }
+            </div>
+          </div>
+        }
+
         @if (selectedAssignee(); as assignee) {
           <p class="text-sm text-slate-600">Will assign to: {{ assignee.displayName }}</p>
         }
@@ -83,7 +104,7 @@ const PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Critical'];
       </mat-dialog-content>
 
       <mat-dialog-actions align="end">
-        <button mat-button type="button" mat-dialog-close>Cancel</button>
+        <button mat-button type="button" [mat-dialog-close]="labelsChanged()">Cancel</button>
         <button mat-flat-button color="primary" type="submit" [disabled]="form.invalid || isSaving()">
           Save
         </button>
@@ -102,6 +123,27 @@ export class TaskDetailComponent {
   readonly error = signal<string | null>(null);
   readonly isSaving = signal(false);
   readonly selectedAssignee = signal<UserDto | null>(null);
+  readonly labelIds = signal<string[]>([...this.data.task.labelIds]);
+  readonly labelsChanged = signal(false);
+
+  protected hasLabel(labelId: string): boolean {
+    return this.labelIds().includes(labelId);
+  }
+
+  async toggleLabel(labelId: string): Promise<void> {
+    if (this.isSaving()) return;
+    this.error.set(null);
+    const attach = !this.hasLabel(labelId);
+    try {
+      const updated = attach
+        ? await firstValueFrom(this.tasksApi.attachLabel(this.data.task.id, labelId))
+        : await firstValueFrom(this.tasksApi.detachLabel(this.data.task.id, labelId));
+      this.labelIds.set(updated.labelIds);
+      this.labelsChanged.set(true);
+    } catch {
+      this.error.set(attach ? 'Could not add the label.' : 'Could not remove the label.');
+    }
+  }
 
   readonly form = this.fb.nonNullable.group({
     title: [this.data.task.title, Validators.required],
