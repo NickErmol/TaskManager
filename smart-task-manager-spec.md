@@ -1658,3 +1658,23 @@ Each test scenario must pass before v1 is declared done.
 - [ ] Analytics dashboard shows personal task stats and completion trend chart
 - [ ] `docker compose up` starts all infra; all 5 services start and pass health checks
 - [ ] All services log to Seq with correlation IDs
+
+---
+## 13. v1.1 addenda
+
+### 13.1 Labels & filtering UI (Feature 1)
+The label backend (§4.3) gains its SPA surface:
+- **Label manager dialog** on board detail — create/delete board labels; colors come
+  from a fixed 12-swatch palette (no free-form color input; guarantees chip contrast).
+- **Label picker** in the task dialog — attach/detach against the existing
+  `POST/DELETE /api/tasks/{id}/labels/{labelId}` routes. These routes intentionally
+  do not require `If-Match`: label membership is a set operation where last-write-wins
+  is harmless. Note that label changes still bump the task's `RowVersion` (the domain
+  touches `UpdatedAt`), so the task dialog tracks the freshest `RowVersion` returned
+  by each toggle and uses it for a subsequent save.
+- **Filter bar** on board detail: free-text (title match), label multi-select
+  (OR within labels), assignee (`any | me | unassigned`), priority. Kinds compose
+  with AND. Filtering is client-side (the §4.3 200-task cap makes it instant) and
+  persists to query params (`?q=&labels=&assignee=&priority=`) so filtered views are
+  shareable. Dragging while filtered maps the drop index onto the unfiltered column
+  so hidden cards keep their relative order.

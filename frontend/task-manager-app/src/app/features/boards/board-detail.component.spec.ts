@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { provideHttpClient } from '@angular/common/http';
 import { HttpErrorResponse } from '@angular/common/http';
 import { CdkDragDrop } from '@angular/cdk/drag-drop';
 import { patchState } from '@ngrx/signals';
@@ -52,12 +53,18 @@ describe('BoardDetailComponent', () => {
       providers: [
         provideRouter([]),
         provideNoopAnimations(),
+        provideHttpClient(),
         { provide: BoardsApiService, useValue: boardsApi },
         { provide: TasksApiService, useValue: tasksApi },
         { provide: MatSnackBar, useValue: snackBar },
         {
           provide: ActivatedRoute,
-          useValue: { snapshot: { paramMap: convertToParamMap({ id: board.id }) } },
+          useValue: {
+            snapshot: {
+              paramMap: convertToParamMap({ id: board.id }),
+              queryParamMap: convertToParamMap({}),
+            },
+          },
         },
       ],
     }).compileComponents();
@@ -88,7 +95,8 @@ describe('BoardDetailComponent', () => {
 
     fixture.componentInstance.onDrop(dropEvent(task, 2), 'InProgress' as TaskStatus);
 
-    expect(moveSpy).toHaveBeenCalledWith(task, 'InProgress', 2);
+    // currentIndex=2 on an empty InProgress column → toRealPosition maps to realTasks.length=0
+    expect(moveSpy).toHaveBeenCalledWith(task, 'InProgress', 0);
   });
 
   it('refetches the board and toasts when moveTask returns 409', async () => {

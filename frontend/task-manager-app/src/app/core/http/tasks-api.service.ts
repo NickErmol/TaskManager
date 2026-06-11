@@ -54,4 +54,12 @@ export class TasksApiService {
   addComment(id: string, body: string): Observable<TaskDto> {
     return this.http.post<TaskDto>(apiUrl(`/api/tasks/${id}/comments`), { body });
   }
+
+  attachLabel(id: string, labelId: string): Observable<TaskDto> {
+    return this.http.post<TaskDto>(apiUrl(`/api/tasks/${id}/labels/${labelId}`), null);
+  }
+
+  detachLabel(id: string, labelId: string): Observable<TaskDto> {
+    return this.http.delete<TaskDto>(apiUrl(`/api/tasks/${id}/labels/${labelId}`));
+  }
 }

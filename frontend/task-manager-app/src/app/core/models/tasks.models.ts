@@ -80,6 +80,11 @@ export interface AddMemberRequest {
   role: BoardRole;
 }
 
+export interface CreateLabelRequest {
+  name: string;
+  color: string;
+}
+
 export interface CreateTaskRequest {
   boardId: string;
   title: string;

@@ -3,6 +3,7 @@ import {
   BoardDetailDto,
   BoardDto,
   CompletionTrendPointDto,
+  LabelDto,
   NotificationDto,
   TaskDto,
   UserSummaryDto,
@@ -49,6 +50,14 @@ export const makeBoardDetail = (overrides: Partial<BoardDetailDto> = {}): BoardD
   members: [],
   labels: [],
   tasksByStatus: {},
+  ...overrides,
+});
+
+export const makeLabel = (overrides: Partial<LabelDto> = {}): LabelDto => ({
+  id: nextGuid(),
+  boardId: nextGuid(),
+  name: 'bug',
+  color: '#ef4444',
   ...overrides,
 });
 
