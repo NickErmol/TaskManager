@@ -1,15 +1,16 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatIconModule } from '@angular/material/icon';
 import { debounceTime, distinctUntilChanged, firstValueFrom, of, switchMap } from 'rxjs';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { LabelDto, TaskDto, TaskPriority, UserDto } from '../../core/models';
+import { ChecklistItemDto, LabelDto, TaskDto, TaskPriority, UserDto } from '../../core/models';
 import { TasksApiService } from '../../core/http/tasks-api.service';
 import { UsersApiService } from '../../core/http/users-api.service';
 
@@ -27,6 +28,7 @@ const PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Critical'];
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    FormsModule,
     ReactiveFormsModule,
     MatDialogModule,
     MatAutocompleteModule,
@@ -34,6 +36,7 @@ const PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Critical'];
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    MatIconModule,
   ],
   template: `
     <h2 mat-dialog-title>Edit task</h2>
@@ -94,6 +97,67 @@ const PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Critical'];
           </div>
         }
 
+        <div class="flex flex-col gap-1">
+          <span class="text-sm font-medium text-slate-600">
+            Checklist
+            @if (checklist().length > 0) {
+              <span data-testid="checklist-progress-dialog" class="ml-1 text-xs text-slate-400">
+                {{ doneCount() }}/{{ checklist().length }}
+              </span>
+            }
+          </span>
+
+          <ul class="flex flex-col gap-1">
+            @for (item of checklist(); track item.id) {
+              <li class="flex items-center gap-2" data-testid="checklist-item">
+                <input
+                  type="checkbox"
+                  data-testid="checklist-toggle"
+                  [attr.aria-label]="(item.isDone ? 'Mark incomplete' : 'Mark complete') + ': ' + item.title"
+                  [checked]="item.isDone"
+                  (change)="toggleItem(item)"
+                />
+                <input
+                  class="flex-1 border-b border-transparent bg-transparent text-sm focus:border-slate-300 focus:outline-none"
+                  [class.text-slate-400]="item.isDone"
+                  [class.line-through]="item.isDone"
+                  [value]="item.title"
+                  (change)="renameItem(item, $event)"
+                />
+                <button
+                  type="button"
+                  data-testid="checklist-delete"
+                  class="text-slate-400 hover:text-red-600"
+                  [attr.aria-label]="'Delete checklist item ' + item.title"
+                  (click)="deleteItem(item)"
+                >
+                  <mat-icon inline>close</mat-icon>
+                </button>
+              </li>
+            }
+          </ul>
+
+          <div class="flex items-center gap-2">
+            <input
+              class="flex-1 border-b border-slate-200 bg-transparent text-sm focus:border-slate-400 focus:outline-none"
+              data-testid="checklist-new-input"
+              placeholder="Add an item"
+              [(ngModel)]="newItemTitle"
+              [ngModelOptions]="{ standalone: true }"
+              (keyup.enter)="addItem()"
+            />
+            <button
+              mat-button
+              type="button"
+              data-testid="checklist-add-button"
+              [disabled]="newItemTitle.trim().length === 0 || isSaving()"
+              (click)="addItem()"
+            >
+              Add
+            </button>
+          </div>
+        </div>
+
         @if (selectedAssignee(); as assignee) {
           <p class="text-sm text-slate-600">Will assign to: {{ assignee.displayName }}</p>
         }
@@ -104,7 +168,7 @@ const PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Critical'];
       </mat-dialog-content>
 
       <mat-dialog-actions align="end">
-        <button mat-button type="button" [mat-dialog-close]="labelsChanged()">Cancel</button>
+        <button mat-button type="button" [mat-dialog-close]="labelsChanged() || checklistChanged()">Cancel</button>
         <button mat-flat-button color="primary" type="submit" [disabled]="form.invalid || isSaving()">
           Save
         </button>
@@ -127,6 +191,64 @@ export class TaskDetailComponent {
   private rowVersion = this.data.task.rowVersion;
   readonly labelIds = signal<string[]>([...this.data.task.labelIds]);
   readonly labelsChanged = signal(false);
+  readonly checklist = signal<ChecklistItemDto[]>([...this.data.task.checklist]);
+  readonly checklistChanged = signal(false);
+  newItemTitle = '';
+
+  protected readonly doneCount = computed(() => this.checklist().filter((i) => i.isDone).length);
+
+  async addItem(): Promise<void> {
+    const title = this.newItemTitle.trim();
+    if (title.length === 0 || this.isSaving()) return;
+    this.error.set(null);
+    try {
+      const updated = await firstValueFrom(this.tasksApi.addChecklistItem(this.data.task.id, title));
+      this.checklist.set(updated.checklist);
+      this.checklistChanged.set(true);
+      this.newItemTitle = '';
+    } catch {
+      this.error.set('Could not add the checklist item.');
+    }
+  }
+
+  async toggleItem(item: ChecklistItemDto): Promise<void> {
+    this.error.set(null);
+    try {
+      const updated = await firstValueFrom(
+        this.tasksApi.updateChecklistItem(this.data.task.id, item.id, { isDone: !item.isDone }),
+      );
+      this.checklist.set(updated.checklist);
+      this.checklistChanged.set(true);
+    } catch {
+      this.error.set('Could not update the checklist item.');
+    }
+  }
+
+  async renameItem(item: ChecklistItemDto, event: Event): Promise<void> {
+    const title = (event.target as HTMLInputElement).value.trim();
+    if (title.length === 0 || title === item.title) return;
+    this.error.set(null);
+    try {
+      const updated = await firstValueFrom(
+        this.tasksApi.updateChecklistItem(this.data.task.id, item.id, { title }),
+      );
+      this.checklist.set(updated.checklist);
+      this.checklistChanged.set(true);
+    } catch {
+      this.error.set('Could not rename the checklist item.');
+    }
+  }
+
+  async deleteItem(item: ChecklistItemDto): Promise<void> {
+    this.error.set(null);
+    try {
+      const updated = await firstValueFrom(this.tasksApi.deleteChecklistItem(this.data.task.id, item.id));
+      this.checklist.set(updated.checklist);
+      this.checklistChanged.set(true);
+    } catch {
+      this.error.set('Could not delete the checklist item.');
+    }
+  }
 
   protected hasLabel(labelId: string): boolean {
     return this.labelIds().includes(labelId);

@@ -1678,3 +1678,30 @@ The label backend (§4.3) gains its SPA surface:
   persists to query params (`?q=&labels=&assignee=&priority=`) so filtered views are
   shareable. Dragging while filtered maps the drop index onto the unfiltered column
   so hidden cards keep their relative order.
+
+### 13.2 Subtasks / checklists (Feature 2)
+`TaskItem` gains a `ChecklistItem` child collection (`Id, TaskItemId, Title 1–200, IsDone,
+Position, CreatedAt`; rich domain model — private setters + factory + `SetDone`/`Rename`).
+New `checklist_items` table, cascade-deleted with the task.
+
+Endpoints under `/api/tasks` (each returns the full fresh `TaskDto`, like the label routes):
+- `POST /api/tasks/{id}/checklist` — body `{ title }`; appends at end.
+- `PUT /api/tasks/{id}/checklist/{itemId}` — body `{ title?, isDone? }`; carries the
+  *desired* state (idempotent setter), not a blind toggle.
+- `DELETE /api/tasks/{id}/checklist/{itemId}`.
+
+**Documented concurrency exception** (alongside the `AppUser` setter exception in §5):
+checklist mutations do **not** require `If-Match` and do **not** advance
+`TaskItem.RowVersion` — the domain `AddChecklistItem`/`RemoveChecklistItem` and the item
+`SetDone`/`Rename` deliberately leave `UpdatedAt` untouched. They are an independent child
+collection where last-write-wins is harmless: two members toggling different items must
+never 409 each other, which is exactly the collaborative use the feature exists for. An
+integration test asserts the task's ETag (xmin) is unchanged across a checklist write. No
+integration events are published (checklist changes have no analytics meaning). Reordering
+is out of scope; `Position` is insertion order. Authorization mirrors other task mutations
+(Owner/Editor required); the update handler authorizes *before* resolving the item so a
+non-editor cannot probe item IDs.
+
+**SPA:** the task dialog gains an inline editor (add, toggle, rename-on-blur, delete) that
+mutates immediately and refetches the board on close; cards show a `done/total` progress
+chip (green at 100%) when a checklist exists.

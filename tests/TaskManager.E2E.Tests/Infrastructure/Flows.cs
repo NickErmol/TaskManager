@@ -208,4 +208,20 @@ public static class Flows
         await dialog.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
         await dialog.WaitForAsync(new() { State = WaitForSelectorState.Detached });
     }
+
+    /// <summary>Adds a checklist item to a task through the task dialog, then closes the dialog.</summary>
+    public static async Task AddChecklistItemAsync(IPage page, string taskTitle, string itemText)
+    {
+        await TaskCard(page, taskTitle).ClickAsync();
+        var dialog = page.Locator("mat-dialog-container");
+        var rows = dialog.GetByTestId("checklist-item");
+        var before = await rows.CountAsync();
+        await dialog.GetByTestId("checklist-new-input").FillAsync(itemText);
+        await dialog.GetByTestId("checklist-add-button").ClickAsync();
+        // The item title renders inside an <input value="..."> (not element text), so a
+        // HasText filter won't match — wait for the newly appended row to exist by index.
+        await rows.Nth(before).WaitForAsync();
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
+        await dialog.WaitForAsync(new() { State = WaitForSelectorState.Detached });
+    }
 }

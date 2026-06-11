@@ -62,4 +62,20 @@ export class TasksApiService {
   detachLabel(id: string, labelId: string): Observable<TaskDto> {
     return this.http.delete<TaskDto>(apiUrl(`/api/tasks/${id}/labels/${labelId}`));
   }
+
+  addChecklistItem(id: string, title: string): Observable<TaskDto> {
+    return this.http.post<TaskDto>(apiUrl(`/api/tasks/${id}/checklist`), { title });
+  }
+
+  updateChecklistItem(
+    id: string,
+    itemId: string,
+    patch: { title?: string; isDone?: boolean },
+  ): Observable<TaskDto> {
+    return this.http.put<TaskDto>(apiUrl(`/api/tasks/${id}/checklist/${itemId}`), patch);
+  }
+
+  deleteChecklistItem(id: string, itemId: string): Observable<TaskDto> {
+    return this.http.delete<TaskDto>(apiUrl(`/api/tasks/${id}/checklist/${itemId}`));
+  }
 }

@@ -12,6 +12,8 @@ public record UpdateTaskRequest(string Title, string? Description, string Priori
 public record MoveTaskRequest(string NewStatus, int Position);
 public record AssignTaskRequest(Guid? AssigneeId);
 public record CommentRequest(string Body);
+public record AddChecklistItemRequest(string Title);
+public record UpdateChecklistItemRequest(string? Title, bool? IsDone);
 
 public static class TaskEndpoints
 {
@@ -107,6 +109,27 @@ public static class TaskEndpoints
         {
             if (http.GetUserId() is not { } userId) return Results.Unauthorized();
             var result = await mediator.Send(new RemoveLabelFromTaskCommand(id, labelId, userId), ct);
+            return TaskResult(http, result);
+        });
+
+        group.MapPost("/{id:guid}/checklist", async (Guid id, AddChecklistItemRequest req, HttpContext http, IMediator mediator, CancellationToken ct) =>
+        {
+            if (http.GetUserId() is not { } userId) return Results.Unauthorized();
+            var result = await mediator.Send(new AddChecklistItemCommand(id, req.Title, userId), ct);
+            return TaskResult(http, result);
+        });
+
+        group.MapPut("/{id:guid}/checklist/{itemId:guid}", async (Guid id, Guid itemId, UpdateChecklistItemRequest req, HttpContext http, IMediator mediator, CancellationToken ct) =>
+        {
+            if (http.GetUserId() is not { } userId) return Results.Unauthorized();
+            var result = await mediator.Send(new UpdateChecklistItemCommand(id, itemId, req.Title, req.IsDone, userId), ct);
+            return TaskResult(http, result);
+        });
+
+        group.MapDelete("/{id:guid}/checklist/{itemId:guid}", async (Guid id, Guid itemId, HttpContext http, IMediator mediator, CancellationToken ct) =>
+        {
+            if (http.GetUserId() is not { } userId) return Results.Unauthorized();
+            var result = await mediator.Send(new DeleteChecklistItemCommand(id, itemId, userId), ct);
             return TaskResult(http, result);
         });
     }
