@@ -34,6 +34,9 @@ public static class AttachmentEndpoints
                 new UploadAttachmentCommand(id, file.FileName, file.ContentType, file.Length, stream, userId), ct);
             if (result.IsFailed) return result.ToHttpResult();
 
+            // Echo the task's RowVersion as an ETag like every other task response, so the SPA's
+            // optimistic-concurrency layer stays in sync (attachments don't bump it, but the body carries it).
+            http.SetETag(result.Value.RowVersion);
             _ = broadcaster.TaskUpsertedAsync(result.Value.BoardId, result.Value, userId)
                 .ContinueWith(t => { _ = t.Exception; }, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
             return Results.Created($"/api/tasks/{id}/attachments", result.Value);
@@ -46,8 +49,8 @@ public static class AttachmentEndpoints
             if (http.GetUserId() is not { } userId) return Results.Unauthorized();
             var result = await mediator.Send(new GetAttachmentContentQuery(id, attId, userId), ct);
             if (result.IsFailed) return result.ToHttpResult();
-            var c = result.Value;
-            return Results.File(c.Content, c.ContentType, fileDownloadName: c.FileName, enableRangeProcessing: false);
+            var content = result.Value;
+            return Results.File(content.Content, content.ContentType, fileDownloadName: content.FileName, enableRangeProcessing: false);
         });
 
         // DELETE /api/tasks/{id}/attachments/{attId}
@@ -57,8 +60,11 @@ public static class AttachmentEndpoints
             if (http.GetUserId() is not { } userId) return Results.Unauthorized();
             var result = await mediator.Send(new DeleteAttachmentCommand(id, attId, userId), ct);
             if (result.IsSuccess)
+            {
+                http.SetETag(result.Value.RowVersion);
                 _ = broadcaster.TaskUpsertedAsync(result.Value.BoardId, result.Value, userId)
                     .ContinueWith(t => { _ = t.Exception; }, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+            }
             return result.ToHttpResult();
         });
     }
