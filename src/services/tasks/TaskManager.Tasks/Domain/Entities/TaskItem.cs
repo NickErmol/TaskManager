@@ -27,8 +27,10 @@ public class TaskItem
 
     private readonly List<TaskLabel> _labels = new();
     private readonly List<TaskComment> _comments = new();
+    private readonly List<ChecklistItem> _checklist = new();
     public IReadOnlyList<TaskLabel> Labels => _labels.AsReadOnly();
     public IReadOnlyList<TaskComment> Comments => _comments.AsReadOnly();
+    public IReadOnlyList<ChecklistItem> Checklist => _checklist.AsReadOnly();
 
     private TaskItem() { }
 
@@ -106,4 +108,19 @@ public class TaskItem
         var removed = _labels.RemoveAll(l => l.LabelId == labelId);
         if (removed > 0) UpdatedAt = DateTimeOffset.UtcNow;
     }
+
+    /// <summary>
+    /// Appends a checklist item at the end. Intentionally does NOT touch <see cref="UpdatedAt"/>:
+    /// checklist writes must not advance RowVersion (xmin) so concurrent toggles by different
+    /// members never 409 (spec §13.2). Same for <see cref="RemoveChecklistItem"/> and item edits.
+    /// </summary>
+    public ChecklistItem AddChecklistItem(string title)
+    {
+        var position = _checklist.Count == 0 ? 0 : _checklist.Max(i => i.Position) + 1;
+        var item = ChecklistItem.Create(Id, title, position);
+        _checklist.Add(item);
+        return item;
+    }
+
+    public bool RemoveChecklistItem(Guid itemId) => _checklist.RemoveAll(i => i.Id == itemId) > 0;
 }
