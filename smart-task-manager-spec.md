@@ -1705,3 +1705,42 @@ non-editor cannot probe item IDs.
 **SPA:** the task dialog gains an inline editor (add, toggle, rename-on-blur, delete) that
 mutates immediately and refetches the board on close; cards show a `done/total` progress
 chip (green at 100%) when a checklist exists.
+
+### 13.3 Real-time collaborative boards (Feature 3)
+Card changes fan out live to everyone viewing a board, plus presence.
+
+**`BoardHub` (Tasks Presentation, route `/hubs/board`)** — amends §4.4: *user-targeted*
+notifications stay in Notifications; *board-scoped* sync lives with the data owner, because
+joining a board group requires a membership check only Tasks can do. JWT arrives via the
+query string (`?access_token=`, same wiring as the notifications hub); `[Authorize]` on the
+hub. `JoinBoard(boardId)` validates membership via the board repository (non-members get a
+`HubException`) then adds the connection to group `board:{boardId}` and registers presence;
+`LeaveBoard`/`OnDisconnectedAsync` unwind both. Tasks now also validates JWTs (previously it
+trusted only the gateway's `X-User-Id` header for REST — REST still does; the hub adds bearer
+validation, with no fallback policy, so the REST endpoints stay anonymous + header-trusted).
+
+**Broadcast** — after each successful task mutation the endpoint fans the fresh `TaskDto`
+(`TaskUpserted(task, actorId)`) or `TaskDeleted(taskId, actorId)` to the board group. This is
+**best-effort, fire-after-commit, NOT through the RabbitMQ outbox**: the durable path
+(Analytics/Notifications) is untouched, and a missed frame self-heals on reload — the right
+consistency class for ephemeral UI sync. The Onion rule holds via an `IBoardBroadcaster` port
+in Application with the SignalR adapter in Presentation; endpoints invoke it (fire-and-forget,
+unobserved-exception-guarded, `TaskScheduler.Default`) after a successful `Result`. Comment
+mutations re-query the parent task to broadcast it; `DeleteTaskCommand` now returns the board
+id so the delete endpoint can address the group.
+
+**Presence** — `IPresenceTracker`, in-memory and connection-refcounted (a user with two tabs
+counts once; the last connection leaving removes them). Correct for the single-instance
+deployment; the interface is the drop-in seam for a Redis-backed impl if Tasks scales out
+(not built now). `PresenceChanged(viewerIds)` broadcasts to the group on every change.
+
+**Gateway** — `/hubs/board` routes to the tasks cluster (a more specific route than the
+existing `/hubs/{**catch-all}` → notifications, with `Order: 0`). CORS already allows the
+SignalR headers.
+
+**SPA** — `core/realtime/board-realtime.service.ts` manages one hub connection
+(`accessTokenFactory`, auto-reconnect, join/leave on board route enter/exit). `boards.store.ts`
+applies `TaskUpserted` only when `rowVersion` is **strictly newer** than the local copy
+(drops stale frames and the echo of the user's own optimistic write); `TaskDeleted` removes the
+card; on reconnect the board is refetched once. Presence avatars (initials chips, "+n" overflow)
+render in the board header and show **only other viewers**, not yourself.

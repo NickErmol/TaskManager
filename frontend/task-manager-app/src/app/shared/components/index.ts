@@ -4,3 +4,4 @@ export * from './label-chip.component';
 export * from './notification-bell.component';
 export * from './priority-chip.component';
 export * from './task-card.component';
+export * from './presence-avatars.component';

@@ -210,4 +210,20 @@ public class TaskCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         _tasks.Received(1).Remove(task);
     }
+
+    [Fact]
+    public async Task DeleteTaskCommandHandler_OnSuccess_ReturnsBoardId()
+    {
+        var boardId = Guid.NewGuid();
+        var task = Fake.Task(boardId);
+        var editor = Guid.NewGuid();
+        _tasks.GetByIdAsync(task.Id, Arg.Any<CancellationToken>()).Returns(task);
+        _boards.GetMemberRoleAsync(boardId, editor, Arg.Any<CancellationToken>()).Returns(BoardRole.Editor);
+        var handler = new DeleteTaskCommandHandler(_tasks, _boards, _uow);
+
+        var result = await handler.Handle(new DeleteTaskCommand(task.Id, editor), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().Be(boardId);
+    }
 }
