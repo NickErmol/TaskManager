@@ -8,6 +8,8 @@ public record CommentDto(Guid Id, Guid TaskId, Guid AuthorId, string Body, DateT
 
 public record ChecklistItemDto(Guid Id, string Title, bool IsDone, int Position);
 
+public record AttachmentDto(Guid Id, string FileName, string ContentType, long SizeBytes, Guid UploadedById, DateTimeOffset UploadedAt);
+
 public record TaskDto(
     Guid Id, Guid BoardId, string Title, string? Description,
     string Status, string Priority, Guid CreatedBy, Guid? AssignedTo,
@@ -15,7 +17,8 @@ public record TaskDto(
     uint RowVersion,
     IReadOnlyList<Guid> LabelIds,
     IReadOnlyList<CommentDto> Comments,
-    IReadOnlyList<ChecklistItemDto> Checklist);
+    IReadOnlyList<ChecklistItemDto> Checklist,
+    IReadOnlyList<AttachmentDto> Attachments);
 
 public record BoardDto(
     Guid Id, string Name, string? Description, Guid OwnerId, DateTimeOffset CreatedAt,
