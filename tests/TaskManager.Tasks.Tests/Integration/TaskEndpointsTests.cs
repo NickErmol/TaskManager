@@ -212,6 +212,62 @@ public class TaskEndpointsTests(TasksWebAppFactory factory)
     }
 
     [Fact]
+    public async Task Checklist_AddToggleRename_Delete_FullLifecycle()
+    {
+        var (boardId, _, editor, _) = await factory.SeedBoardAsync();
+        var task = await factory.SeedTaskAsync(boardId, editor);
+        var client = factory.As(editor);
+
+        // add
+        var added = await client.PostAsJsonAsync($"/api/tasks/{task.Id}/checklist", new { Title = "Write tests" });
+        await added.ShouldBeAsync(HttpStatusCode.OK);
+        var afterAdd = (await added.Content.ReadFromJsonAsync<TaskDto>())!;
+        afterAdd.Checklist.Should().ContainSingle(i => i.Title == "Write tests" && !i.IsDone);
+        var itemId = afterAdd.Checklist[0].Id;
+
+        // toggle done + rename via PUT
+        var updated = await client.PutAsJsonAsync($"/api/tasks/{task.Id}/checklist/{itemId}",
+            new { Title = "Write more tests", IsDone = true });
+        await updated.ShouldBeAsync(HttpStatusCode.OK);
+        var afterUpdate = (await updated.Content.ReadFromJsonAsync<TaskDto>())!;
+        afterUpdate.Checklist[0].Title.Should().Be("Write more tests");
+        afterUpdate.Checklist[0].IsDone.Should().BeTrue();
+
+        // delete
+        var deleted = await client.DeleteAsync($"/api/tasks/{task.Id}/checklist/{itemId}");
+        await deleted.ShouldBeAsync(HttpStatusCode.OK);
+        (await deleted.Content.ReadFromJsonAsync<TaskDto>())!.Checklist.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Checklist_DoesNotRequireIfMatch_AndDoesNotChangeRowVersion()
+    {
+        var (boardId, _, editor, _) = await factory.SeedBoardAsync();
+        var task = await factory.SeedTaskAsync(boardId, editor);
+        var client = factory.As(editor);
+        var etagBefore = (await client.GetAsync($"/api/tasks/{task.Id}")).Etag();
+
+        // No If-Match header — must still succeed (spec §13.2).
+        var added = await client.PostAsJsonAsync($"/api/tasks/{task.Id}/checklist", new { Title = "no if-match needed" });
+        await added.ShouldBeAsync(HttpStatusCode.OK);
+
+        // RowVersion (xmin) must NOT have advanced: checklist writes don't touch the task row.
+        var etagAfter = (await client.GetAsync($"/api/tasks/{task.Id}")).Etag();
+        etagAfter.Should().Be(etagBefore, "checklist writes must not advance the task RowVersion");
+    }
+
+    [Fact]
+    public async Task Checklist_AddAsViewer_Returns403()
+    {
+        var (boardId, _, editor, viewer) = await factory.SeedBoardAsync();
+        var task = await factory.SeedTaskAsync(boardId, editor);
+
+        var response = await factory.As(viewer).PostAsJsonAsync($"/api/tasks/{task.Id}/checklist", new { Title = "nope" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task Endpoints_WithoutUserIdHeader_Return401()
     {
         var client = factory.CreateClient(); // no X-User-Id
