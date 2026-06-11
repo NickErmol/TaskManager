@@ -17,20 +17,39 @@ public class ActivityFeedFlowTests(PlaywrightFixture fixture)
         await Flows.CreateBoardAsync(page, boardName);
         await Flows.OpenBoardAsync(page, boardName);
         await Flows.CreateTaskAsync(page, "Feed me");
-
-        // The feed is eventually consistent (outbox → RabbitMQ → projection) and reloads when the
-        // Feature-3 realtime frame ticks the panel; auto-retry (20s) absorbs the projection lag.
-        // A manual refresh nudge makes the assertion robust even if the create's frame is missed.
         await Assertions.Expect(page.GetByTestId("activity-panel")).ToBeVisibleAsync();
-        await page.GetByTestId("activity-refresh").ClickAsync();
-        await Assertions.Expect(page.GetByTestId("activity-item").First)
-            .ToContainTextAsync("created", new() { Timeout = 20_000 });
 
-        // Move the card → status-changed event → "moved" appears after the realtime tick reloads the panel.
+        // The feed is eventually consistent (outbox → RabbitMQ → projection). The panel only
+        // refetches when refresh is clicked or a realtime frame ticks it — Playwright's locator
+        // retry re-polls the DOM but can't itself trigger a refetch. So poll: click refresh, wait,
+        // re-check, until the projected event shows (or we give up after ~20s).
+        await ClickRefreshUntilVisibleAsync(page, "created");
+
+        // Move the card → status-changed event → "moved".
         await Flows.DragTaskToColumnAsync(page, "Feed me", "Done");
-        await page.GetByTestId("activity-refresh").ClickAsync();
-        await Assertions.Expect(
-            page.Locator("[data-testid='activity-item']", new() { HasText = "moved" }).First)
-            .ToBeVisibleAsync(new() { Timeout = 20_000 });
+        await ClickRefreshUntilVisibleAsync(page, "moved");
+    }
+
+    /// <summary>
+    /// Clicks the activity-refresh button until an activity item containing <paramref name="text"/>
+    /// appears, re-fetching each iteration so a slow projection doesn't leave a stale DOM.
+    /// </summary>
+    private static async Task ClickRefreshUntilVisibleAsync(IPage page, string text)
+    {
+        var item = page.Locator("[data-testid='activity-item']", new() { HasText = text });
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            await page.GetByTestId("activity-refresh").ClickAsync();
+            try
+            {
+                await item.First.WaitForAsync(new() { Timeout = 2_000 });
+                return;
+            }
+            catch (TimeoutException)
+            {
+                // projection not ready yet — click refresh again
+            }
+        }
+        await Assertions.Expect(item.First).ToBeVisibleAsync();
     }
 }
