@@ -33,6 +33,8 @@ public class TaskItem
     public IReadOnlyList<TaskComment> Comments => _comments.AsReadOnly();
     public IReadOnlyList<ChecklistItem> Checklist => _checklist.AsReadOnly();
     public IReadOnlyList<Attachment> Attachments => _attachments.AsReadOnly();
+    /// <summary>Per-task attachment cap. Enforced in the Application upload handler (Result.Fail on
+    /// excess) rather than here, so the limit surfaces as a 409 rather than a thrown domain exception.</summary>
     public const int MaxAttachments = 20;
 
     private TaskItem() { }
@@ -139,6 +141,9 @@ public class TaskItem
         return att;
     }
 
+    /// <summary>Removes an attachment by id, returning whether one was found. Like
+    /// <see cref="AddAttachment"/>, intentionally leaves <see cref="UpdatedAt"/>/<see cref="RowVersion"/>
+    /// untouched (last-write-wins child collection).</summary>
     public bool RemoveAttachment(Guid attachmentId)
     {
         var att = _attachments.FirstOrDefault(a => a.Id == attachmentId);
