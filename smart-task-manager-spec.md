@@ -1790,13 +1790,13 @@ Files can be uploaded to, downloaded from, and deleted from individual tasks. Th
 
 Attachment mutations are last-write-wins and **deliberately do not advance the parent task's `RowVersion`**. Two members uploading files simultaneously must never 409 each other. `AttachmentDto` is embedded inside the existing `TaskDto` on every read.
 
-**Endpoints** (all under `/api/tasks`, gateway `X-User-Id` authorized; any board member may use all three):
+**Endpoints** (all under `/api/tasks`, gateway `X-User-Id` authorized; mutations require **Owner or Editor**, downloads are open to any board member including **Viewer** — matching the §4.3 authorization rules):
 
 | Method | Path | Behavior |
 |---|---|---|
-| `POST` | `/api/tasks/{id}/attachments` | `multipart/form-data` single `file` field → `201` + fresh `TaskDto`. Validates size cap, whitelist, and magic bytes. No `If-Match` required. |
-| `GET` | `/api/tasks/{id}/attachments/{attId}/content` | Streams bytes from MinIO. Always returns `Content-Disposition: attachment` — never inline-rendered, which blocks stored-XSS via uploaded SVG/HTML. Read access, so a Viewer role can download. |
-| `DELETE` | `/api/tasks/{id}/attachments/{attId}` | Removes the record and the MinIO object → returns fresh `TaskDto`. Any board member may delete. |
+| `POST` | `/api/tasks/{id}/attachments` | `multipart/form-data` single `file` field → `201` + fresh `TaskDto`. Validates size cap, whitelist, and magic bytes. No `If-Match` required. **Owner or Editor only.** |
+| `GET` | `/api/tasks/{id}/attachments/{attId}/content` | Streams bytes from MinIO. Always returns `Content-Disposition: attachment` — never inline-rendered, which blocks stored-XSS via uploaded SVG/HTML. Read access, so **any board member (incl. Viewer)** can download. |
+| `DELETE` | `/api/tasks/{id}/attachments/{attId}` | Removes the record and the MinIO object → returns fresh `TaskDto`. **Owner or Editor only.** |
 
 **Upload policy** — 10 MB per file. Extension and MIME content-type are both checked against a whitelist: images (`png`, `jpg`/`jpeg`, `gif`, `webp`), `pdf`, `txt`, `csv`, `zip`, `docx`, `xlsx`, `pptx`. For declared image and PDF types the handler additionally reads the first bytes and compares against known magic-byte signatures to defeat content-type spoofing. The storage key is always server-generated; the original filename is stored only in the metadata column and is never trusted to construct an object path.
 
