@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -10,7 +11,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
 import { debounceTime, distinctUntilChanged, firstValueFrom, of, switchMap } from 'rxjs';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ChecklistItemDto, LabelDto, TaskDto, TaskPriority, UserDto } from '../../core/models';
+import { AttachmentDto, ChecklistItemDto, LabelDto, TaskDto, TaskPriority, UserDto } from '../../core/models';
 import { TasksApiService } from '../../core/http/tasks-api.service';
 import { UsersApiService } from '../../core/http/users-api.service';
 
@@ -28,6 +29,8 @@ const PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Critical'];
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    DatePipe,
+    DecimalPipe,
     FormsModule,
     ReactiveFormsModule,
     MatDialogModule,
@@ -158,6 +161,36 @@ const PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Critical'];
           </div>
         </div>
 
+        <div class="flex flex-col gap-1">
+          <span class="text-sm font-medium text-slate-600">
+            Attachments
+            @if (attachments().length > 0) {
+              <span data-testid="attachments-count" class="ml-1 text-xs text-slate-400">{{ attachments().length }}</span>
+            }
+          </span>
+
+          <ul class="flex flex-col gap-1">
+            @for (att of attachments(); track att.id) {
+              <li class="flex items-center gap-2" data-testid="attachment-item">
+                <button type="button" data-testid="attachment-download" class="underline text-sm" (click)="downloadAttachment(att)">{{ att.fileName }}</button>
+                <span class="text-xs text-slate-400">{{ att.sizeBytes / 1024 | number: '1.0-0' }} KB</span>
+                <span class="text-xs text-slate-400">{{ att.uploadedAt | date: 'short' }}</span>
+                <button
+                  type="button"
+                  data-testid="attachment-delete"
+                  class="text-slate-400 hover:text-red-600"
+                  [attr.aria-label]="'Delete attachment ' + att.fileName"
+                  (click)="removeAttachment(att)"
+                >
+                  <mat-icon inline>close</mat-icon>
+                </button>
+              </li>
+            }
+          </ul>
+
+          <input type="file" aria-label="Upload attachment" data-testid="attachment-input" (change)="uploadFile($event)" />
+        </div>
+
         @if (selectedAssignee(); as assignee) {
           <p class="text-sm text-slate-600">Will assign to: {{ assignee.displayName }}</p>
         }
@@ -168,7 +201,7 @@ const PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Critical'];
       </mat-dialog-content>
 
       <mat-dialog-actions align="end">
-        <button mat-button type="button" [mat-dialog-close]="labelsChanged() || checklistChanged()">Cancel</button>
+        <button mat-button type="button" [mat-dialog-close]="labelsChanged() || checklistChanged() || attachmentsChanged()">Cancel</button>
         <button mat-flat-button color="primary" type="submit" [disabled]="form.invalid || isSaving()">
           Save
         </button>
@@ -193,6 +226,8 @@ export class TaskDetailComponent {
   readonly labelsChanged = signal(false);
   readonly checklist = signal<ChecklistItemDto[]>([...this.data.task.checklist]);
   readonly checklistChanged = signal(false);
+  readonly attachments = signal<AttachmentDto[]>([...this.data.task.attachments]);
+  readonly attachmentsChanged = signal(false);
   newItemTitle = '';
 
   protected readonly doneCount = computed(() => this.checklist().filter((i) => i.isDone).length);
@@ -247,6 +282,48 @@ export class TaskDetailComponent {
       this.checklistChanged.set(true);
     } catch {
       this.error.set('Could not delete the checklist item.');
+    }
+  }
+
+  async uploadFile(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.error.set(null);
+    try {
+      const updated = await firstValueFrom(this.tasksApi.uploadAttachment(this.data.task.id, file));
+      this.attachments.set(updated.attachments);
+      this.attachmentsChanged.set(true);
+    } catch {
+      this.error.set('Could not upload the file.');
+    } finally {
+      input.value = '';
+    }
+  }
+
+  async removeAttachment(att: AttachmentDto): Promise<void> {
+    this.error.set(null);
+    try {
+      const updated = await firstValueFrom(this.tasksApi.deleteAttachment(this.data.task.id, att.id));
+      this.attachments.set(updated.attachments);
+      this.attachmentsChanged.set(true);
+    } catch {
+      this.error.set('Could not delete the attachment.');
+    }
+  }
+
+  async downloadAttachment(att: AttachmentDto): Promise<void> {
+    try {
+      const blob = await firstValueFrom(this.tasksApi.downloadAttachment(this.data.task.id, att.id));
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = att.fileName;
+      link.click();
+      // Defer revoke: .click() may start the download asynchronously on some UAs.
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch {
+      this.error.set('Could not download the attachment.');
     }
   }
 

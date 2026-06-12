@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { ErrorStateMatcher } from '@angular/material/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -8,6 +9,14 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { BoardsStore } from './boards.store';
 import { EmptyStateComponent } from '../../shared/components';
+
+// Quick-create field has no error message; never paint it red (the submit flag would
+// otherwise keep it in the error state after the first create).
+class NeverErrorStateMatcher implements ErrorStateMatcher {
+  isErrorState(): boolean {
+    return false;
+  }
+}
 
 // Smart component: the post-login landing page listing the user's boards.
 @Component({
@@ -25,14 +34,17 @@ import { EmptyStateComponent } from '../../shared/components';
     EmptyStateComponent,
   ],
   template: `
-    <main class="mx-auto max-w-5xl p-6">
-      <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <h1 class="text-2xl font-semibold text-slate-800">Your boards</h1>
+    <main class="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+      <div class="mb-7 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 class="text-2xl font-bold tracking-tight text-slate-900">Your boards</h1>
+          <p class="mt-1 text-sm text-slate-500">Organize work into boards and track it end to end.</p>
+        </div>
 
         <!-- [formGroup] is required for (ngSubmit) to fire (and prevent native submit) -->
         <form class="flex items-center gap-2" [formGroup]="createForm" (ngSubmit)="create()">
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <input matInput placeholder="New board name" formControlName="name" />
+            <input matInput placeholder="New board name" formControlName="name" [errorStateMatcher]="neverError" />
           </mat-form-field>
           <button mat-flat-button color="primary" type="submit" [disabled]="createForm.invalid">
             <mat-icon>add</mat-icon>
@@ -55,15 +67,27 @@ import { EmptyStateComponent } from '../../shared/components';
             <a
               [routerLink]="['/boards', board.id]"
               data-testid="board-card"
-              class="block rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow"
+              class="tm-board-card group"
             >
-              <h2 class="font-medium text-slate-800">{{ board.name }}</h2>
-              @if (board.description; as description) {
-                <p class="mt-1 text-sm text-slate-500">{{ description }}</p>
-              }
-              <p class="mt-3 text-xs text-slate-400">
+              <div class="flex items-start gap-3 pl-2">
+                <span
+                  class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-sm font-bold text-brand-700 ring-1 ring-brand-100"
+                >
+                  {{ boardInitials(board.name) }}
+                </span>
+                <div class="min-w-0 flex-1">
+                  <h2 class="truncate font-semibold text-slate-800 group-hover:text-brand-700">
+                    {{ board.name }}
+                  </h2>
+                  @if (board.description; as description) {
+                    <p class="mt-0.5 line-clamp-2 text-sm text-slate-500">{{ description }}</p>
+                  }
+                </div>
+              </div>
+              <div class="mt-4 flex items-center gap-1.5 pl-2 text-xs font-medium text-slate-400">
+                <mat-icon class="!h-4 !w-4 !text-[16px]">group</mat-icon>
                 {{ board.members.length }} member{{ board.members.length === 1 ? '' : 's' }}
-              </p>
+              </div>
             </a>
           }
         </div>
@@ -75,6 +99,7 @@ import { EmptyStateComponent } from '../../shared/components';
 })
 export class BoardListComponent implements OnInit {
   protected readonly store = inject(BoardsStore);
+  protected readonly neverError = new NeverErrorStateMatcher();
 
   readonly createForm = new FormGroup({
     name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -90,5 +115,14 @@ export class BoardListComponent implements OnInit {
     if (name.length === 0) return;
     this.createForm.reset();
     void this.store.createBoard({ name });
+  }
+
+  protected boardInitials(name: string): string {
+    return name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]!.toUpperCase())
+      .join('');
   }
 }

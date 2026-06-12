@@ -30,13 +30,13 @@ describe('AppComponent', () => {
     expect(fixture.componentInstance).toBeTruthy();
   });
 
-  it('hides the toolbar when not authenticated', () => {
+  it('hides the nav when not authenticated', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('mat-toolbar')).toBeFalsy();
+    expect(fixture.nativeElement.querySelector('.tm-nav')).toBeFalsy();
   });
 
-  it('shows the toolbar with the notification bell when authenticated', () => {
+  it('shows the nav with the notification bell when authenticated', () => {
     const store = TestBed.inject(AuthStore);
     patchState(store, {
       accessToken: 'jwt',
@@ -46,7 +46,7 @@ describe('AppComponent', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('mat-toolbar')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.tm-nav')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('tm-notification-bell')).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain('Nick');
   });

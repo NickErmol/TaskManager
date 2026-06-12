@@ -12,7 +12,6 @@ A multi-user task management application with Kanban boards, team assignments, d
 - Build a polished Angular SPA with reactive state management (NgRx Signals) and strict component conventions
 - Keep local dev simple: one `docker compose up` starts everything
 ### Non-goals (out of scope for v1)
-- File attachments
 - OAuth / social login
 - Mobile app
 - Multi-tenancy
@@ -987,6 +986,10 @@ All sensitive configuration — `JWT_SECRET`, database connection strings, SMTP 
 | `RABBITMQ_URL` | Tasks, Notifications, Analytics | AMQP URI (e.g. `amqp://guest:guest@rabbitmq:5672`) |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | Notifications | MailKit settings; locally points at Mailhog (`mailhog:1025`, no auth) |
 | `SEQ_URL` | All services | Serilog sink (`http://seq:5341` locally) |
+| `S3_ENDPOINT` | Tasks | S3/MinIO endpoint URL (e.g. `http://minio:9000` locally) |
+| `S3_BUCKET` | Tasks | Attachments bucket name (e.g. `task-attachments`) |
+| `S3_ACCESS_KEY` | Tasks | S3 access key id |
+| `S3_SECRET_KEY` | Tasks | S3 secret access key |
 
 ### Service network isolation
 In production, only the gateway is internet-facing. The four downstream services (`identity`, `tasks`, `notifications`, `analytics`) are reachable **only via the gateway** — on Fly.io that means private 6PN networking with no public ports allocated. This matters because services trust the `X-User-Id` and `X-User-Email` headers the gateway sets from validated JWT claims; if a service were directly reachable, those headers could be spoofed by any caller. Local dev exposes service ports for convenience — production must not.
@@ -1777,3 +1780,26 @@ The feed is eventually consistent (outbox → RabbitMQ → projection), so it ma
 frame by a moment — the reload happens on the signal and the manual control covers the gap.
 
 This completes v1.1; the release is cut as `release/1.1.0` → tag `v1.1.0`.
+
+### 13.5 File attachments (v1.2)
+Files can be uploaded to, downloaded from, and deleted from individual tasks. This flips the §1 non-goal and delivers MinIO-backed binary storage without exposing the object store to the public internet.
+
+**Storage and the `IFileStorage` port** — all binary I/O is abstracted behind an `IFileStorage` port defined in the Tasks Application layer (`PutAsync`, `OpenReadAsync`, `DeleteAsync`). The Infrastructure implementation (`MinioFileStorage`) uses `AWSSDK.S3` pointed at the configured MinIO endpoint. MinIO stays private; the client always reaches objects through the Tasks service. This keeps the Onion dependency rule intact: Domain and Application reference no storage SDK.
+
+**`Attachment` entity** — an independent child collection of `TaskItem` (like `ChecklistItem` in §13.2). Fields: `Id`, `TaskItemId` (FK), `FileName` (original client name — display metadata only), `ContentType`, `SizeBytes`, `StorageKey` (server-generated; format `boards/{boardId}/tasks/{taskId}/{guid}`), `UploadedById`, `UploadedAt` (`DateTimeOffset`). Private setters + factory method; no public setters. Maximum 20 attachments per task.
+
+Attachment mutations are last-write-wins and **deliberately do not advance the parent task's `RowVersion`**. Two members uploading files simultaneously must never 409 each other. `AttachmentDto` is embedded inside the existing `TaskDto` on every read.
+
+**Endpoints** (all under `/api/tasks`, gateway `X-User-Id` authorized; mutations require **Owner or Editor**, downloads are open to any board member including **Viewer** — matching the §4.3 authorization rules):
+
+| Method | Path | Behavior |
+|---|---|---|
+| `POST` | `/api/tasks/{id}/attachments` | `multipart/form-data` single `file` field → `201` + fresh `TaskDto`. Validates size cap, whitelist, and magic bytes. No `If-Match` required. **Owner or Editor only.** |
+| `GET` | `/api/tasks/{id}/attachments/{attId}/content` | Streams bytes from MinIO. Always returns `Content-Disposition: attachment` — never inline-rendered, which blocks stored-XSS via uploaded SVG/HTML. Read access, so **any board member (incl. Viewer)** can download. |
+| `DELETE` | `/api/tasks/{id}/attachments/{attId}` | Removes the record and the MinIO object → returns fresh `TaskDto`. **Owner or Editor only.** |
+
+**Upload policy** — 10 MB per file. Extension and MIME content-type are both checked against a whitelist: images (`png`, `jpg`/`jpeg`, `gif`, `webp`), `pdf`, `txt`, `csv`, `zip`, `docx`, `xlsx`, `pptx`. For declared image and PDF types the handler additionally reads the first bytes and compares against known magic-byte signatures to defeat content-type spoofing. The storage key is always server-generated; the original filename is stored only in the metadata column and is never trusted to construct an object path.
+
+**Integration events and live sync** — the two new contract events `AttachmentAddedEvent` and `AttachmentRemovedEvent` are published via the existing Tasks EF Core outbox (topic routing keys `task.attachment-added` / `task.attachment-removed`). Analytics consumes them through its EF Core inbox (dedup prevents double-counting) and appends activity rows to the per-board feed (§13.4); the v1.1 activity panel renders them with no frontend change. Live board sync is automatic: after each attach/remove the handler sends a fresh `TaskDto` (which now includes the updated attachment list) via the existing `TaskUpserted` SignalR broadcast — no new hub message types needed.
+
+**New environment variables** — `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` (see §8).

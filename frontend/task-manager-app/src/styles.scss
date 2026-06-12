@@ -1,8 +1,157 @@
-/* You can add global styles to this file, and also import other style files */
+@use '@angular/material' as mat;
 
-html, body { height: 100%; }
-body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }
+/* ── Angular Material 3 theme ─────────────────────────────────────────────
+   Custom violet brand theme (replaces the prebuilt azure-blue). Recolors every
+   mat-* component cohesively. Tailwind utilities (loaded after) handle layout. */
+@include mat.core();
+
+$tm-theme: mat.define-theme(
+  (
+    color: (
+      theme-type: light,
+      primary: mat.$violet-palette,
+      tertiary: mat.$magenta-palette,
+    ),
+    typography: (
+      brand-family: 'Inter, system-ui, sans-serif',
+      plain-family: 'Inter, system-ui, sans-serif',
+      bold-weight: 700,
+      medium-weight: 600,
+      regular-weight: 400,
+    ),
+    density: (
+      scale: 0,
+    ),
+  )
+);
+
+:root {
+  @include mat.all-component-themes($tm-theme);
+  --tm-brand-600: #7c3aed;
+  --tm-brand-700: #6d28d9;
+}
+
+/* Compact density for dense control rows (e.g. the board filter bar) so the
+   default M3 56px form fields don't dominate. */
+$tm-compact-theme: mat.define-theme(
+  (
+    density: (
+      scale: -3,
+    ),
+  )
+);
+.tm-filter-bar {
+  @include mat.all-component-densities($tm-compact-theme);
+}
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ── Global ───────────────────────────────────────────────────────────── */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
+  color: #1e293b;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Soft violet wash fading into slate — gives the app some depth behind cards. */
+  background:
+    radial-gradient(1100px 480px at 100% -8%, #ede9fe 0%, rgba(237, 233, 254, 0) 60%),
+    radial-gradient(900px 420px at -10% 0%, #faf5ff 0%, rgba(250, 245, 255, 0) 55%),
+    #f6f7fb;
+  background-attachment: fixed;
+}
+
+/* Tidier scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+  background-clip: content-box;
+}
+
+/* ── Reusable component classes ───────────────────────────────────────── */
+@layer components {
+  /* Top navigation bar */
+  .tm-nav {
+    @apply sticky top-0 z-30 flex items-center gap-2 px-4 sm:px-6;
+    height: 4rem;
+    color: #fff;
+    background: linear-gradient(100deg, #5b21b6 0%, #6d28d9 45%, #7c3aed 100%);
+    box-shadow: 0 4px 24px -10px rgb(76 29 149 / 0.6);
+  }
+  .tm-logo {
+    @apply grid h-9 w-9 place-items-center rounded-xl text-brand-700;
+    background: #fff;
+    box-shadow:
+      0 2px 8px -2px rgba(30, 27, 75, 0.45),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+  }
+  .tm-nav-link {
+    @apply inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition;
+    color: rgba(255, 255, 255, 0.85);
+  }
+  .tm-nav-link:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+  }
+  .tm-user-chip {
+    @apply inline-flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-sm font-medium text-white;
+    background: rgba(255, 255, 255, 0.12);
+  }
+  .tm-avatar-initials {
+    @apply grid h-7 w-7 place-items-center rounded-full text-xs font-semibold text-brand-700;
+    background: #fff;
+  }
+  /* Material buttons/icons placed inside the nav should read white */
+  .tm-nav .mat-mdc-icon-button,
+  .tm-nav .mat-mdc-button {
+    color: #fff;
+  }
+
+  /* Generic surface card */
+  .tm-card {
+    @apply rounded-2xl border border-slate-200/80 bg-white shadow-card;
+  }
+
+  /* Board grid card */
+  .tm-board-card {
+    @apply relative block overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-card transition duration-200;
+  }
+  .tm-board-card::before {
+    content: '';
+    @apply absolute inset-y-0 left-0 w-1;
+    background: linear-gradient(180deg, #8b5cf6, #6d28d9);
+    opacity: 0.85;
+  }
+  .tm-board-card:hover {
+    @apply -translate-y-0.5 border-brand-200 shadow-card-hover;
+  }
+
+  /* Auth screen gradient backdrop */
+  .tm-auth-bg {
+    @apply grid min-h-screen place-items-center p-4;
+    background:
+      radial-gradient(1200px 600px at 110% -10%, #c4b5fd 0%, rgba(196, 181, 253, 0) 55%),
+      radial-gradient(1000px 520px at -10% 110%, #a78bfa 0%, rgba(167, 139, 250, 0) 50%),
+      linear-gradient(160deg, #1e1b4b 0%, #4c1d95 45%, #6d28d9 100%);
+  }
+}

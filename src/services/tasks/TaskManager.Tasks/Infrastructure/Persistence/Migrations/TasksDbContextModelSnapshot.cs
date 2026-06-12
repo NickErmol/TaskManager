@@ -190,6 +190,45 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
                     b.ToTable("OutboxState");
                 });
 
+            modelBuilder.Entity("TaskManager.Tasks.Domain.Entities.Attachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<Guid>("TaskItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UploadedById")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TaskItemId");
+
+                    b.ToTable("attachments", (string)null);
+                });
+
             modelBuilder.Entity("TaskManager.Tasks.Domain.Entities.Board", b =>
                 {
                     b.Property<Guid>("Id")
@@ -407,6 +446,15 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("MessageId", "ConsumerId");
                 });
 
+            modelBuilder.Entity("TaskManager.Tasks.Domain.Entities.Attachment", b =>
+                {
+                    b.HasOne("TaskManager.Tasks.Domain.Entities.TaskItem", null)
+                        .WithMany("Attachments")
+                        .HasForeignKey("TaskItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("TaskManager.Tasks.Domain.Entities.BoardMember", b =>
                 {
                     b.HasOne("TaskManager.Tasks.Domain.Entities.Board", null)
@@ -500,6 +548,8 @@ namespace TaskManager.Tasks.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("TaskManager.Tasks.Domain.Entities.TaskItem", b =>
                 {
+                    b.Navigation("Attachments");
+
                     b.Navigation("Checklist");
 
                     b.Navigation("Comments");

@@ -48,6 +48,29 @@ public static class DependencyInjection
             });
         });
 
+        // --- Object storage (MinIO / S3) for attachments ---
+        var s3Endpoint = config["S3_ENDPOINT"] ?? throw new InvalidOperationException("S3_ENDPOINT is not configured");
+        var s3Bucket = config["S3_BUCKET"] ?? "task-attachments"; // intentional default: bucket name is not a secret; credential/endpoint reads above throw on missing
+        var s3Key = config["S3_ACCESS_KEY"] ?? throw new InvalidOperationException("S3_ACCESS_KEY is not configured");
+        var s3Secret = config["S3_SECRET_KEY"] ?? throw new InvalidOperationException("S3_SECRET_KEY is not configured");
+
+        services.AddSingleton<Amazon.S3.IAmazonS3>(_ =>
+        {
+            var s3Config = new Amazon.S3.AmazonS3Config
+            {
+                ServiceURL = s3Endpoint,
+                ForcePathStyle = true, // MinIO requires path-style addressing
+            };
+            // Newer AWS SDK adds integrity checksums that some MinIO builds reject; force WHEN_REQUIRED.
+            s3Config.RequestChecksumCalculation = Amazon.Runtime.RequestChecksumCalculation.WHEN_REQUIRED;
+            s3Config.ResponseChecksumValidation = Amazon.Runtime.ResponseChecksumValidation.WHEN_REQUIRED;
+            return new Amazon.S3.AmazonS3Client(new Amazon.Runtime.BasicAWSCredentials(s3Key, s3Secret), s3Config);
+        });
+        services.AddScoped<Application.Interfaces.IFileStorage>(sp =>
+            new Storage.MinioFileStorage(sp.GetRequiredService<Amazon.S3.IAmazonS3>(), s3Bucket));
+        services.AddHostedService(sp =>
+            new Storage.MinioBucketInitializer(sp.GetRequiredService<Amazon.S3.IAmazonS3>(), s3Bucket));
+
         return services;
     }
 
@@ -62,6 +85,8 @@ public static class DependencyInjection
         MapEvent<TaskCompletedEvent>(cfg, "task.completed");
         MapEvent<TaskCommentAddedEvent>(cfg, "task.comment-added");
         MapEvent<DeadlineApproachingEvent>(cfg, "task.deadline-approaching");
+        MapEvent<AttachmentAddedEvent>(cfg, "task.attachment-added");
+        MapEvent<AttachmentRemovedEvent>(cfg, "task.attachment-removed");
 
         static void MapEvent<T>(IRabbitMqBusFactoryConfigurator cfg, string routingKey) where T : class
         {

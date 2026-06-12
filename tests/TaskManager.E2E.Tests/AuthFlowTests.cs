@@ -15,7 +15,7 @@ public class AuthFlowTests(PlaywrightFixture fixture)
         await Flows.RegisterAsync(page);
 
         page.Url.Should().Contain("/boards");
-        await Assertions.Expect(page.Locator("mat-toolbar")).ToBeVisibleAsync();
+        await Assertions.Expect(page.Locator(".tm-nav")).ToBeVisibleAsync();
     }
 
     [Fact]
@@ -28,7 +28,7 @@ public class AuthFlowTests(PlaywrightFixture fixture)
         await Flows.LoginAsync(page, user);
 
         page.Url.Should().Contain("/boards");
-        await Assertions.Expect(page.Locator("mat-toolbar")).ToContainTextAsync(user.DisplayName);
+        await Assertions.Expect(page.Locator(".tm-nav")).ToContainTextAsync(user.DisplayName);
     }
 
     [Fact]
@@ -42,7 +42,7 @@ public class AuthFlowTests(PlaywrightFixture fixture)
         await page.ReloadAsync();
 
         await page.WaitForURLAsync("**/boards");
-        await Assertions.Expect(page.Locator("mat-toolbar")).ToContainTextAsync(user.DisplayName);
+        await Assertions.Expect(page.Locator(".tm-nav")).ToContainTextAsync(user.DisplayName);
     }
 
     [Fact]
