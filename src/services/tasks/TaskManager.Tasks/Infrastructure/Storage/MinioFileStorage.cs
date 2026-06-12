@@ -20,7 +20,9 @@ public class MinioFileStorage(IAmazonS3 s3, string bucket) : IFileStorage
             InputStream = content,
             ContentType = contentType,
             AutoCloseStream = false,
-            DisablePayloadSigning = true, // http MinIO; avoids streaming-signature overhead
+            // NB: do NOT set DisablePayloadSigning here. The AWS SDK rejects it over plain HTTP
+            // ("When DisablePayloadSigning is true, the request must be sent over HTTPS"), and
+            // MinIO is addressed over http:// both locally and in CI. Let SigV4 sign the payload.
         };
         req.Headers.ContentLength = length;
         await s3.PutObjectAsync(req, ct);
