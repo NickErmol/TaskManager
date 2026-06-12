@@ -17,7 +17,7 @@ const PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Critical'];
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule],
   template: `
-    <div class="mb-4 flex flex-wrap items-center gap-2" data-testid="filter-bar">
+    <div class="tm-filter-bar mb-4 flex flex-wrap items-center gap-2" data-testid="filter-bar">
       <mat-form-field appearance="outline" subscriptSizing="dynamic" class="w-56">
         <mat-label>Search tasks</mat-label>
         <input
@@ -41,7 +41,7 @@ const PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Critical'];
         </button>
       }
 
-      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="w-36">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="w-52">
         <mat-label>Assignee</mat-label>
         <mat-select
           data-testid="filter-assignee"

@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AuthStore } from '../../core/auth';
@@ -18,15 +19,26 @@ import { AuthStore } from '../../core/auth';
     MatButtonModule,
     MatCardModule,
     MatFormFieldModule,
+    MatIconModule,
     MatInputModule,
     MatProgressSpinnerModule,
   ],
   template: `
-    <div class="flex min-h-screen items-center justify-center bg-slate-50 p-4">
-      <mat-card class="w-full max-w-md p-6">
-        <h1 class="mb-6 text-2xl font-semibold">Sign in</h1>
+    <div class="tm-auth-bg">
+      <div class="w-full max-w-md">
+        <div class="mb-7 flex flex-col items-center text-center text-white">
+          <span class="mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-white/15 shadow-lg ring-1 ring-white/20 backdrop-blur">
+            <mat-icon class="!h-8 !w-8 !text-[32px] text-white">dashboard</mat-icon>
+          </span>
+          <h1 class="text-2xl font-bold tracking-tight">Smart Task Manager</h1>
+          <p class="mt-1 text-sm text-white/70">Plan, track, and ship your work together.</p>
+        </div>
 
-        <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-2">
+        <mat-card class="tm-card w-full p-7">
+          <h2 class="mb-1 text-xl font-semibold text-slate-800">Sign in</h2>
+          <p class="mb-5 text-sm text-slate-500">Welcome back — enter your details.</p>
+
+          <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-2">
           <mat-form-field appearance="outline">
             <mat-label>Email</mat-label>
             <input matInput type="email" formControlName="email" autocomplete="email" />
@@ -53,10 +65,12 @@ import { AuthStore } from '../../core/auth';
           </button>
         </form>
 
-        <p class="mt-4 text-sm text-slate-600">
-          No account yet? <a routerLink="/register" class="text-blue-600 hover:underline">Create one</a>
-        </p>
-      </mat-card>
+          <p class="mt-5 text-center text-sm text-slate-600">
+            No account yet?
+            <a routerLink="/register" class="font-semibold text-brand-700 hover:underline">Create one</a>
+          </p>
+        </mat-card>
+      </div>
     </div>
   `,
 })
