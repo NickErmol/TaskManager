@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { LoginComponent } from './login.component';
 import { AuthStore } from '../../core/auth';
@@ -10,16 +10,34 @@ describe('LoginComponent', () => {
   let fixture: ComponentFixture<LoginComponent>;
   let store: InstanceType<typeof AuthStore>;
 
-  beforeEach(async () => {
+  const configure = async (errorCode: string | null = null): Promise<void> => {
+    TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
       imports: [LoginComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([]), provideNoopAnimations()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        provideNoopAnimations(),
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              queryParamMap: convertToParamMap(errorCode === null ? {} : { error: errorCode }),
+            },
+          },
+        },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LoginComponent);
     store = TestBed.inject(AuthStore);
     jest.spyOn(store, 'login').mockResolvedValue();
     fixture.detectChanges();
+  };
+
+  beforeEach(async () => {
+    await configure();
   });
 
   const setValue = (selector: string, value: string): void => {
@@ -51,5 +69,12 @@ describe('LoginComponent', () => {
 
     submitButton().click();
     expect(store.login).toHaveBeenCalledWith({ email: 'nick@example.com', password: 'Passw0rd!' });
+  });
+
+  it('shows a message when redirected back with error=email-unverified', async () => {
+    await configure('email-unverified');
+    expect(fixture.nativeElement.textContent).toContain(
+      'Your account with that provider has no verified email address, so we could not sign you in.',
+    );
   });
 });

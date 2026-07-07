@@ -9,7 +9,8 @@ namespace TaskManager.Identity.Tests.Integration;
 /// End-to-end smoke for the auth flow against a real Postgres container:
 ///   register → login → /me → refresh → logout
 /// </summary>
-public class AuthFlowTests : IClassFixture<IdentityWebAppFactory>
+[Collection("identity-integration")]
+public class AuthFlowTests
 {
     private readonly IdentityWebAppFactory _factory;
     public AuthFlowTests(IdentityWebAppFactory factory) => _factory = factory;

@@ -26,5 +26,10 @@ export const routes: Routes = [
       import('./features/analytics/analytics-dashboard.component').then((m) => m.AnalyticsDashboardComponent),
     canActivate: [authGuard],
   },
+  {
+    path: 'auth/callback',
+    loadComponent: () =>
+      import('./features/auth/auth-callback.component').then((m) => m.AuthCallbackComponent),
+  },
   { path: '**', redirectTo: 'boards' },
 ];

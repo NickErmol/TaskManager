@@ -3,6 +3,7 @@ using FluentResults;
 using FluentValidation;
 using Mediator;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -12,6 +13,7 @@ using TaskManager.Identity.Infrastructure;
 using TaskManager.Identity.Infrastructure.Persistence;
 using TaskManager.Identity.Infrastructure.Services;
 using TaskManager.Identity.Presentation.Endpoints;
+using TaskManager.Identity.Presentation.ExternalAuth;
 using TaskManager.Identity.Presentation.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -46,6 +48,9 @@ builder.Services
     });
 builder.Services.AddAuthorization();
 
+// External OAuth providers (spec §13.6) — registers only providers with credentials.
+builder.Services.AddExternalAuthProviders(builder.Configuration, builder.Environment);
+
 // Mediator + pipeline behaviors + Mapperly + validators
 builder.Services.AddMediator(opt => opt.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddScoped(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
@@ -72,6 +77,21 @@ using (var scope = app.Services.CreateScope())
     await db.Database.MigrateAsync();
 }
 
+// Behind the gateway (YARP) the browser only ever sees the public gateway origin,
+// but YARP forwards to this service on its internal container host. Honor the
+// X-Forwarded-Host/Proto headers YARP sends so OAuth redirect URIs (spec §13.6)
+// are built against the public origin, not the unreachable internal address.
+// Identity is only reachable via the gateway (spec §8 service network isolation),
+// so trusting these headers is the same trust model as the gateway's X-User-Id
+// header. A no-op under `dotnet run`/TestServer where no proxy sets the headers.
+var forwardedHeadersOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedHost | ForwardedHeaders.XForwardedProto,
+};
+forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
+
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseAuthentication();
@@ -79,6 +99,9 @@ app.UseAuthorization();
 
 app.MapHealthChecks("/health");
 app.MapAuthEndpoints(app.Environment);
+app.MapExternalAuthEndpoints(app.Environment);
+if (ExternalAuthExtensions.FakeOAuthEnabled(app.Configuration, app.Environment))
+    app.MapFakeOAuthEndpoints();
 app.MapUserEndpoints();
 
 app.Run();

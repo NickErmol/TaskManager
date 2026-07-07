@@ -12,7 +12,7 @@ A multi-user task management application with Kanban boards, team assignments, d
 - Build a polished Angular SPA with reactive state management (NgRx Signals) and strict component conventions
 - Keep local dev simple: one `docker compose up` starts everything
 ### Non-goals (out of scope for v1)
-- OAuth / social login
+- ~~OAuth / social login~~ — shipped in v1.3, see §13.6
 - Mobile app
 - Multi-tenancy
 ---
@@ -990,6 +990,10 @@ All sensitive configuration — `JWT_SECRET`, database connection strings, SMTP 
 | `S3_BUCKET` | Tasks | Attachments bucket name (e.g. `task-attachments`) |
 | `S3_ACCESS_KEY` | Tasks | S3 access key id |
 | `S3_SECRET_KEY` | Tasks | S3 secret access key |
+| `OAUTH_GOOGLE_CLIENT_ID` / `OAUTH_GOOGLE_CLIENT_SECRET` | Identity | Google OAuth app credentials; provider hidden if unset (§13.6) |
+| `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET` | Identity | GitHub OAuth app credentials; provider hidden if unset (§13.6) |
+| `OAUTH_FAKE_ENABLED` | Identity | Dev-only stub provider; ignored outside Development (§13.6) |
+| `FRONTEND_URL` | Identity | SPA origin for OAuth callback redirects (default `http://localhost:4200`) |
 
 ### Service network isolation
 In production, only the gateway is internet-facing. The four downstream services (`identity`, `tasks`, `notifications`, `analytics`) are reachable **only via the gateway** — on Fly.io that means private 6PN networking with no public ports allocated. This matters because services trust the `X-User-Id` and `X-User-Email` headers the gateway sets from validated JWT claims; if a service were directly reachable, those headers could be spoofed by any caller. Local dev exposes service ports for convenience — production must not.
@@ -1803,3 +1807,36 @@ Attachment mutations are last-write-wins and **deliberately do not advance the p
 **Integration events and live sync** — the two new contract events `AttachmentAddedEvent` and `AttachmentRemovedEvent` are published via the existing Tasks EF Core outbox (topic routing keys `task.attachment-added` / `task.attachment-removed`). Analytics consumes them through its EF Core inbox (dedup prevents double-counting) and appends activity rows to the per-board feed (§13.4); the v1.1 activity panel renders them with no frontend change. Live board sync is automatic: after each attach/remove the handler sends a fresh `TaskDto` (which now includes the updated attachment list) via the existing `TaskUpserted` SignalR broadcast — no new hub message types needed.
 
 **New environment variables** — `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` (see §8).
+
+### 13.6 OAuth / social login (v1.3)
+Adds "Continue with Google" and "Continue with GitHub" to the login and register screens via a server-side OAuth 2.0 authorization-code flow hosted by the Identity service. Token delivery to the SPA reuses the existing refresh-cookie machinery unchanged. A provider-asserted **verified** matching email auto-links to an existing account. Sign-in/sign-up only — no connected-accounts management UI in this release. This flips the §1 non-goal.
+
+**Flow:**
+
+1. The SPA button performs a full-page navigation to `GET /api/auth/external/{provider}?returnUrl=` (gateway → Identity).
+2. Identity validates the provider against the enabled catalog (404 if unknown) and sanitizes `returnUrl` to a relative path (open-redirect guard), then issues an OAuth `Challenge` for that provider.
+3. The provider redirects back to the Identity callback on the same gateway origin.
+4. The callback reads the external principal, dispatches `ExternalLoginCommand`. On success it sets the `tm_refresh` cookie — the same `HttpOnly; Secure; SameSite=Strict; Path=/api/auth/refresh` policy as password login — and 302-redirects to the SPA `/auth/callback?returnUrl=...`.
+5. `/auth/callback` calls the existing `POST /api/auth/refresh` to obtain its access token. No new token-delivery mechanism.
+6. Failures 302-redirect to `/login?error=<code>` (codes: `email-unverified`, `provider-error`) — a navigating browser cannot receive JSON.
+
+`localhost:4200 → localhost:5000` is same-site (`SameSite` ignores ports), so the `Strict` refresh cookie flows exactly as it does for password login. The §10 eTLD+1 deployment caveat is unchanged.
+
+**Sign-in orchestration** — `ExternalLoginCommand` applies these rules in order, returning `Result<AuthHandlerResult>` like the existing login/register handlers:
+
+1. Existing `(provider, providerKey)` login found → sign in that user.
+2. No login match, email present and **verified**, matches an existing account → auto-link (`AddLoginAsync`), set `EmailConfirmed = true`, and **revoke every pre-existing refresh token for that user** (account-pre-hijacking mitigation) → sign in.
+3. No login match, email present and **verified**, no existing account → create a passwordless confirmed user (`EmailConfirmed = true`, no password) and link → sign in.
+4. Email missing or unverified → `Result.Fail("email-unverified")`.
+
+No database migration is required — `AspNetUserLogins` already exists in the Identity schema.
+
+**Providers** — Google and GitHub both register through ASP.NET's in-box generic `AddOAuth` handler, so zero new NuGet packages are needed. A provider registers only if its client id and secret are configured; a fresh clone with no OAuth credentials shows no external login buttons and nothing breaks. `GET /api/auth/external/providers` returns the enabled subset and drives which buttons the SPA renders. GitHub's primary email can be unverified or null on the base profile, so the handler additionally calls `/user/emails` to obtain the verified primary address. A short-lived `Identity.External` cookie (`SameSite=Lax`) carries the provider principal between the challenge and callback legs; the correlation cookie uses `SecurePolicy=SameAsRequest` so plain-http local dev keeps working while HTTPS deployments still get a `Secure` cookie.
+
+**Reverse-proxy origin** — the OAuth `redirect_uri` must be the public gateway origin the browser can reach, but Identity sits behind YARP on an internal host. Identity therefore enables `UseForwardedHeaders` (honoring `X-Forwarded-Host` / `X-Forwarded-Proto`, which the gateway sets) so absolute OAuth URLs are built against the public origin rather than the internal container address. Identity is only reachable via the gateway (§8 service network isolation), so trusting those headers is the same trust model as the gateway's `X-User-Id` header. Without this, the provider would redirect the browser to an unreachable internal host — a failure only the full-stack E2E can catch, since the in-process integration tests share a single origin.
+
+**Fake provider (Development only)** — an in-proc stub under `/api/auth/fake-oauth/*` registers as provider `fake` when `OAUTH_FAKE_ENABLED=true` **and** the hosting environment is Development — an unconditional hard stop, so no configuration can enable it in staging or production. It lets local runs, CI, and the E2E suite exercise the full real flow with no internet dependency; the Playwright suite clicks "Continue with Fake".
+
+**Config** — new env vars, cross-referenced in §8: `OAUTH_GOOGLE_CLIENT_ID` / `OAUTH_GOOGLE_CLIENT_SECRET`, `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET`, `OAUTH_FAKE_ENABLED`, `FRONTEND_URL`.
+
+This completes v1.3; the release is cut as `release/1.3.0` → tag `v1.3.0`.

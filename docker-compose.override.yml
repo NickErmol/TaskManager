@@ -24,6 +24,13 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       Serilog__WriteTo__1__Args__serverUrl: http://seq:5341
+      # v1.3 OAuth (spec §13.6): dev-only fake provider so E2E exercises the
+      # full external-login flow. Browser-facing leg via the gateway; token /
+      # userinfo legs loop back to this container.
+      OAUTH_FAKE_ENABLED: "true"
+      FakeOAuth__PublicUrl: http://localhost:5000
+      FakeOAuth__SelfUrl: http://localhost:8080
+      FRONTEND_URL: http://localhost:4200
 
   tasks-svc:
     environment:
