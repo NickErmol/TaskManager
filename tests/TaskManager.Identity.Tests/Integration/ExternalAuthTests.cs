@@ -135,4 +135,73 @@ public class ExternalAuthTests(IdentityWebAppFactory factory)
         res.Headers.Location!.ToString()
             .Should().Be("http://localhost:4200/login?error=provider-error");
     }
+
+    [Fact]
+    public async Task Second_dance_signs_into_the_same_account()
+    {
+        var email = $"repeat-{Guid.NewGuid():N}@example.com";
+        Func<string, string> mutate = u => u + "&email=" + Uri.EscapeDataString(email);
+
+        var (_, client1) = await RunOAuthDanceAsync("/api/auth/external/fake", mutate);
+        var id1 = await CurrentUserIdAsync(client1);
+
+        var (_, client2) = await RunOAuthDanceAsync("/api/auth/external/fake", mutate);
+        var id2 = await CurrentUserIdAsync(client2);
+
+        id2.Should().Be(id1);
+    }
+
+    [Fact]
+    public async Task Verified_matching_email_auto_links_to_password_account()
+    {
+        var email = $"link-{Guid.NewGuid():N}@example.com";
+        var register = await factory.CreateClient().PostAsJsonAsync("/api/auth/register",
+            new { Email = email, DisplayName = "Linker", Password = "Password1A" });
+        register.StatusCode.Should().Be(HttpStatusCode.OK);
+        var registeredId = (await register.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("user").GetProperty("id").GetGuid();
+
+        var (_, client) = await RunOAuthDanceAsync("/api/auth/external/fake",
+            u => u + "&email=" + Uri.EscapeDataString(email));
+
+        (await CurrentUserIdAsync(client)).Should().Be(registeredId);
+
+        // Password login still works after linking.
+        var login = await factory.CreateClient().PostAsJsonAsync("/api/auth/login",
+            new { Email = email, Password = "Password1A" });
+        login.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Unverified_email_redirects_with_error_and_sets_no_refresh_cookie()
+    {
+        var (final, _) = await RunOAuthDanceAsync("/api/auth/external/fake",
+            u => u + "&email=" + Uri.EscapeDataString($"unv-{Guid.NewGuid():N}@example.com")
+                   + "&verified=false");
+
+        final.Headers.Location!.ToString()
+            .Should().Be("http://localhost:4200/login?error=email-unverified");
+        var hasRefresh = final.Headers.TryGetValues("Set-Cookie", out var cookies)
+            && cookies.Any(c => c.StartsWith("tm_refresh="));
+        hasRefresh.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Absolute_returnUrl_is_replaced_with_boards()
+    {
+        var (final, _) = await RunOAuthDanceAsync(
+            "/api/auth/external/fake?returnUrl=" + Uri.EscapeDataString("https://evil.example.com"),
+            u => u + "&email=" + Uri.EscapeDataString($"redir-{Guid.NewGuid():N}@example.com"));
+
+        final.Headers.Location!.ToString()
+            .Should().StartWith("http://localhost:4200/auth/callback?returnUrl=%2Fboards");
+    }
+
+    private static async Task<Guid> CurrentUserIdAsync(HttpClient clientWithRefreshCookie)
+    {
+        var refresh = await clientWithRefreshCookie.PostAsync("/api/auth/refresh", null);
+        refresh.StatusCode.Should().Be(HttpStatusCode.OK);
+        var auth = await refresh.Content.ReadFromJsonAsync<JsonElement>();
+        return auth.GetProperty("user").GetProperty("id").GetGuid();
+    }
 }
