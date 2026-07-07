@@ -32,6 +32,7 @@ describe('AuthStore', () => {
     http = TestBed.inject(HttpTestingController);
     router = TestBed.inject(Router);
     jest.spyOn(router, 'navigate').mockResolvedValue(true);
+    jest.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
   });
 
   afterEach(() => http.verify());
@@ -126,5 +127,28 @@ describe('AuthStore', () => {
     await promise;
 
     expect(store.user()).toEqual(user);
+  });
+
+  describe('completeExternalLogin', () => {
+    it('exchanges the cookie for a token and navigates to the returnUrl', async () => {
+      const done = store.completeExternalLogin('/boards/7');
+      http.expectOne((r) => r.url.endsWith('/api/auth/refresh')).flush(authResponse);
+      await done;
+
+      expect(store.accessToken()).toBe(authResponse.accessToken);
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/boards/7');
+    });
+
+    it('routes to /login with error=provider-error when the exchange fails', async () => {
+      const done = store.completeExternalLogin('/boards');
+      http.expectOne((r) => r.url.endsWith('/api/auth/refresh'))
+        .flush(null, { status: 401, statusText: 'unauthorized' });
+      await done;
+
+      expect(store.accessToken()).toBeNull();
+      expect(router.navigate).toHaveBeenCalledWith(['/login'], {
+        queryParams: { error: 'provider-error' },
+      });
+    });
   });
 });
