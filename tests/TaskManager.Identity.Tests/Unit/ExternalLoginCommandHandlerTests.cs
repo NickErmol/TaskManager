@@ -59,6 +59,7 @@ public class ExternalLoginCommandHandlerTests
         var result = await BuildSut().Handle(Cmd(), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.User.Email.Should().Be("user@example.com");
         await _userManager.DidNotReceive().CreateAsync(Arg.Any<AppUser>());
         await _userManager.Received(1).AddLoginAsync(existing,
             Arg.Is<UserLoginInfo>(l => l.LoginProvider == "fake" && l.ProviderKey == "provider-key-1"));
@@ -85,6 +86,7 @@ public class ExternalLoginCommandHandlerTests
         var result = await BuildSut().Handle(Cmd(), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.User.Email.Should().Be("user@example.com");
         await _userManager.DidNotReceive().UpdateAsync(Arg.Any<AppUser>());
         await _refreshRepo.Received(1).RevokeAllForUserAsync(existing.Id, Arg.Any<CancellationToken>());
     }
@@ -132,6 +134,22 @@ public class ExternalLoginCommandHandlerTests
 
         result.IsFailed.Should().BeTrue();
         result.Errors.Should().Contain(e => e.Message.Contains("boom-create"));
+        await _userManager.DidNotReceive().AddLoginAsync(Arg.Any<AppUser>(), Arg.Any<UserLoginInfo>());
+    }
+
+    [Fact]
+    public async Task Failed_email_confirmation_update_surfaces_identity_errors()
+    {
+        var existing = AppUser.Create("user@example.com", "User");
+        _userManager.FindByLoginAsync("fake", "provider-key-1").ReturnsNull();
+        _userManager.FindByEmailAsync("user@example.com").Returns(existing);
+        _userManager.UpdateAsync(existing)
+            .Returns(IdentityResult.Failed(new IdentityError { Description = "boom-update" }));
+
+        var result = await BuildSut().Handle(Cmd(), CancellationToken.None);
+
+        result.IsFailed.Should().BeTrue();
+        result.Errors.Should().Contain(e => e.Message.Contains("boom-update"));
         await _userManager.DidNotReceive().AddLoginAsync(Arg.Any<AppUser>(), Arg.Any<UserLoginInfo>());
     }
 

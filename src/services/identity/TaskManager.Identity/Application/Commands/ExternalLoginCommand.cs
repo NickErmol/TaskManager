@@ -61,7 +61,9 @@ public class ExternalLoginCommandHandler(
                 // Provider asserted the address is verified — same documented AppUser
                 // public-setter exception (spec §4.2) as the create branch.
                 user.EmailConfirmed = true;
-                await userManager.UpdateAsync(user);
+                var confirmed = await userManager.UpdateAsync(user);
+                if (!confirmed.Succeeded)
+                    return Result.Fail<AuthHandlerResult>(confirmed.Errors.Select(e => (IError)new Error(e.Description)));
             }
 
             // First link to a pre-existing local account: revoke existing sessions so a
