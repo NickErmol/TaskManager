@@ -41,8 +41,10 @@ public class ExternalLoginCommandHandlerTests
         var result = await BuildSut().Handle(Cmd(), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.User.Email.Should().Be("user@example.com");
         await _userManager.DidNotReceive().CreateAsync(Arg.Any<AppUser>());
         await _userManager.DidNotReceive().AddLoginAsync(Arg.Any<AppUser>(), Arg.Any<UserLoginInfo>());
+        await _refreshRepo.DidNotReceive().RevokeAllForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -51,6 +53,7 @@ public class ExternalLoginCommandHandlerTests
         var existing = AppUser.Create("user@example.com", "User");
         _userManager.FindByLoginAsync("fake", "provider-key-1").ReturnsNull();
         _userManager.FindByEmailAsync("user@example.com").Returns(existing);
+        _userManager.UpdateAsync(existing).Returns(IdentityResult.Success);
         _userManager.AddLoginAsync(existing, Arg.Any<UserLoginInfo>()).Returns(IdentityResult.Success);
 
         var result = await BuildSut().Handle(Cmd(), CancellationToken.None);
@@ -59,6 +62,31 @@ public class ExternalLoginCommandHandlerTests
         await _userManager.DidNotReceive().CreateAsync(Arg.Any<AppUser>());
         await _userManager.Received(1).AddLoginAsync(existing,
             Arg.Is<UserLoginInfo>(l => l.LoginProvider == "fake" && l.ProviderKey == "provider-key-1"));
+
+        // The provider asserted the address is verified — the local account must
+        // end up confirmed, mirroring the create branch.
+        existing.EmailConfirmed.Should().BeTrue();
+        await _userManager.Received(1).UpdateAsync(existing);
+
+        // Account pre-hijacking mitigation: first external link to a pre-existing
+        // local account kills any live sessions.
+        await _refreshRepo.Received(1).RevokeAllForUserAsync(existing.Id, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Auto_link_with_already_confirmed_email_skips_update_but_still_revokes_sessions()
+    {
+        var existing = AppUser.Create("user@example.com", "User");
+        existing.EmailConfirmed = true;
+        _userManager.FindByLoginAsync("fake", "provider-key-1").ReturnsNull();
+        _userManager.FindByEmailAsync("user@example.com").Returns(existing);
+        _userManager.AddLoginAsync(existing, Arg.Any<UserLoginInfo>()).Returns(IdentityResult.Success);
+
+        var result = await BuildSut().Handle(Cmd(), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _userManager.DidNotReceive().UpdateAsync(Arg.Any<AppUser>());
+        await _refreshRepo.Received(1).RevokeAllForUserAsync(existing.Id, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -72,9 +100,11 @@ public class ExternalLoginCommandHandlerTests
         var result = await BuildSut().Handle(Cmd(), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.User.Email.Should().Be("user@example.com");
         await _userManager.Received(1).CreateAsync(
             Arg.Is<AppUser>(u => u.Email == "user@example.com" && u.EmailConfirmed && u.DisplayName == "User"));
         await _userManager.Received(1).AddLoginAsync(Arg.Any<AppUser>(), Arg.Any<UserLoginInfo>());
+        await _refreshRepo.DidNotReceive().RevokeAllForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -90,9 +120,40 @@ public class ExternalLoginCommandHandlerTests
         await _userManager.Received(1).CreateAsync(Arg.Is<AppUser>(u => u.DisplayName == "user@example.com"));
     }
 
+    [Fact]
+    public async Task Failed_user_creation_surfaces_identity_errors_and_does_not_link()
+    {
+        _userManager.FindByLoginAsync("fake", "provider-key-1").ReturnsNull();
+        _userManager.FindByEmailAsync("user@example.com").ReturnsNull();
+        _userManager.CreateAsync(Arg.Any<AppUser>())
+            .Returns(IdentityResult.Failed(new IdentityError { Description = "boom-create" }));
+
+        var result = await BuildSut().Handle(Cmd(), CancellationToken.None);
+
+        result.IsFailed.Should().BeTrue();
+        result.Errors.Should().Contain(e => e.Message.Contains("boom-create"));
+        await _userManager.DidNotReceive().AddLoginAsync(Arg.Any<AppUser>(), Arg.Any<UserLoginInfo>());
+    }
+
+    [Fact]
+    public async Task Failed_login_linking_surfaces_identity_errors()
+    {
+        _userManager.FindByLoginAsync("fake", "provider-key-1").ReturnsNull();
+        _userManager.FindByEmailAsync("user@example.com").ReturnsNull();
+        _userManager.CreateAsync(Arg.Any<AppUser>()).Returns(IdentityResult.Success);
+        _userManager.AddLoginAsync(Arg.Any<AppUser>(), Arg.Any<UserLoginInfo>())
+            .Returns(IdentityResult.Failed(new IdentityError { Description = "boom-link" }));
+
+        var result = await BuildSut().Handle(Cmd(), CancellationToken.None);
+
+        result.IsFailed.Should().BeTrue();
+        result.Errors.Should().Contain(e => e.Message.Contains("boom-link"));
+    }
+
     [Theory]
     [InlineData(null, true)]
     [InlineData("", true)]
+    [InlineData("   ", true)]
     [InlineData("user@example.com", false)]
     public async Task Unverified_or_missing_email_fails_without_touching_accounts(string? email, bool verified)
     {

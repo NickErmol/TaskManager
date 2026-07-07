@@ -50,6 +50,24 @@ public class ExternalLoginCommandHandler(
             var created = await userManager.CreateAsync(user);
             if (!created.Succeeded)
                 return Result.Fail<AuthHandlerResult>(created.Errors.Select(e => (IError)new Error(e.Description)));
+            // If AddLoginAsync below fails after this create succeeded, a retry
+            // self-heals via the FindByEmailAsync branch — intended compensation,
+            // no transaction needed.
+        }
+        else
+        {
+            if (!user.EmailConfirmed)
+            {
+                // Provider asserted the address is verified — same documented AppUser
+                // public-setter exception (spec §4.2) as the create branch.
+                user.EmailConfirmed = true;
+                await userManager.UpdateAsync(user);
+            }
+
+            // First link to a pre-existing local account: revoke existing sessions so a
+            // squatter who pre-registered this email can't keep a live session (account
+            // pre-hijacking mitigation, spec §13.6).
+            await refreshRepo.RevokeAllForUserAsync(user.Id, ct);
         }
 
         var linked = await userManager.AddLoginAsync(
