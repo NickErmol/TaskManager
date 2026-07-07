@@ -4,6 +4,27 @@ All notable changes to Smart Task Manager are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-08
+
+"OAuth / social login" release.
+
+### Added
+- **OAuth / social login** (§13.6) — "Continue with Google" and "Continue with
+  GitHub" on the login and register screens via a server-side OAuth 2.0
+  authorization-code flow hosted by the Identity service. Both providers use
+  ASP.NET's in-box generic OAuth handler (no new packages) and register only when
+  their client id/secret are configured, so the buttons appear only where
+  credentials are set. A provider-asserted **verified** matching email auto-links
+  to an existing account (and revokes that account's prior refresh tokens as an
+  account-pre-hijacking guard); an unknown verified email creates a passwordless
+  confirmed account. Token delivery reuses the existing refresh-cookie flow
+  unchanged. Sign-in/sign-up only — no connected-accounts management UI. Flips the
+  §1 non-goal. No database migration (`AspNetUserLogins` already existed).
+
+### Fixed
+- Identity honors `X-Forwarded-Host`/`Proto` behind the gateway so OAuth redirect
+  URIs target the public origin instead of the internal container address.
+
 ## [1.2.0] - 2026-07-07
 
 "File Attachments" release, plus a full visual refresh of the SPA.
@@ -88,6 +109,7 @@ delivered across the 8-step implementation playbook (spec §11).
   SignalR negotiate preflight succeeds.
 - Board-create form wrapped in a `FormGroup` so `(ngSubmit)` fires.
 
+[1.3.0]: https://github.com/NickErmol/TaskManager/releases/tag/v1.3.0
 [1.2.0]: https://github.com/NickErmol/TaskManager/releases/tag/v1.2.0
 [1.1.0]: https://github.com/NickErmol/TaskManager/releases/tag/v1.1.0
 [1.0.0]: https://github.com/NickErmol/TaskManager/releases/tag/v1.0.0
