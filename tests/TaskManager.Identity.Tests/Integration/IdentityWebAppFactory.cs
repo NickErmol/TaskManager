@@ -1,6 +1,9 @@
+using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
 
 namespace TaskManager.Identity.Tests.Integration;
@@ -32,6 +35,12 @@ public class IdentityWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
         Environment.SetEnvironmentVariable("JWT_SECRET", JwtSecret);
         Environment.SetEnvironmentVariable("Jwt__Issuer", "TaskManager.Identity");
         Environment.SetEnvironmentVariable("Jwt__Audience", "TaskManager");
+        // AddExternalAuthProviders reads builder.Configuration at Program.cs build time —
+        // before ConfigureWebHost's ConfigureAppConfiguration callback is merged in — so
+        // these need to land as real env vars too, same reasoning as the DB/JWT vars above.
+        Environment.SetEnvironmentVariable("FakeOAuth__PublicUrl", "http://localhost");
+        Environment.SetEnvironmentVariable("FakeOAuth__SelfUrl", "http://localhost");
+        Environment.SetEnvironmentVariable("FRONTEND_URL", "http://localhost:4200");
     }
 
     public new async Task DisposeAsync()
@@ -45,6 +54,9 @@ public class IdentityWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
         Environment.SetEnvironmentVariable("JWT_SECRET", null);
         Environment.SetEnvironmentVariable("Jwt__Issuer", null);
         Environment.SetEnvironmentVariable("Jwt__Audience", null);
+        Environment.SetEnvironmentVariable("FakeOAuth__PublicUrl", null);
+        Environment.SetEnvironmentVariable("FakeOAuth__SelfUrl", null);
+        Environment.SetEnvironmentVariable("FRONTEND_URL", null);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -60,6 +72,30 @@ public class IdentityWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
             ["JWT_SECRET"] = JwtSecret,
             ["Jwt:Issuer"] = "TaskManager.Identity",
             ["Jwt:Audience"] = "TaskManager",
+            ["FakeOAuth:PublicUrl"] = "http://localhost",
+            ["FakeOAuth:SelfUrl"] = "http://localhost",
+            ["FRONTEND_URL"] = "http://localhost:4200",
         }));
+
+        builder.ConfigureTestServices(services =>
+        {
+            // The generic OAuth handler's backchannel does real HTTP; reroute it into
+            // the TestServer pipeline. Lazily resolved — Server isn't built yet here.
+            services.PostConfigure<OAuthOptions>("fake", opt =>
+                opt.Backchannel = new HttpClient(new LazyTestServerHandler(() => Server.CreateHandler()))
+                {
+                    Timeout = TimeSpan.FromSeconds(30),
+                    MaxResponseContentBufferSize = 1024 * 1024,
+                });
+        });
+    }
+
+    private sealed class LazyTestServerHandler(Func<HttpMessageHandler> factory) : DelegatingHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            InnerHandler ??= factory();
+            return base.SendAsync(request, ct);
+        }
     }
 }

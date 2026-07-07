@@ -148,6 +148,11 @@ public static class ExternalAuthExtensions
         // Default None requires Secure and gets dropped on plain-http local/E2E;
         // Lax survives the top-level GET redirect back from the provider.
         opt.CorrelationCookie.SameSite = SameSiteMode.Lax;
+        // RemoteAuthenticationOptions defaults CorrelationCookie.SecurePolicy to Always,
+        // which drops the cookie entirely on plain-http local/test hosts (the browser/
+        // CookieContainer never sends a Secure cookie back over http). SameAsRequest still
+        // yields Secure in real deployments, which always terminate TLS before this app.
+        opt.CorrelationCookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
         opt.Events.OnRemoteFailure = ctx =>
         {
             // User denied consent, state mismatch, provider outage — never a 500.

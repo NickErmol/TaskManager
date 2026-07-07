@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace TaskManager.Identity.Tests.Integration;
 
@@ -69,5 +70,57 @@ public class ExternalAuthTests(IdentityWebAppFactory factory) : IClassFixture<Id
         userinfo.GetProperty("email").GetString().Should().Be("alice@example.com");
         userinfo.GetProperty("email_verified").GetBoolean().Should().BeTrue();
         userinfo.GetProperty("name").GetString().Should().Be("Fake User");
+    }
+
+    /// <summary>
+    /// Follows redirects manually: TestServer's HttpClient can't follow the final
+    /// redirect to the SPA origin, and we need to inspect intermediate responses.
+    /// mutateAuthorize lets tests append fake-provider params (email/verified).
+    /// </summary>
+    private async Task<(HttpResponseMessage Final, HttpClient Client)> RunOAuthDanceAsync(
+        string startPath, Func<string, string>? mutateAuthorize = null)
+    {
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        });
+
+        var url = startPath;
+        for (var hop = 0; hop < 10; hop++)
+        {
+            var res = await client.GetAsync(url);
+            if (res.StatusCode is not (HttpStatusCode.Redirect or HttpStatusCode.Found))
+                return (res, client);
+            var location = res.Headers.Location!.ToString();
+            // Left our origin (e.g. the SPA at :4200) — the dance is over.
+            if (location.StartsWith("http") && !location.StartsWith("http://localhost/"))
+                return (res, client);
+            if (location.Contains("/api/auth/fake-oauth/authorize") && mutateAuthorize is not null)
+                location = mutateAuthorize(location);
+            url = location;
+        }
+        throw new InvalidOperationException("OAuth dance did not terminate in 10 hops");
+    }
+
+    [Fact]
+    public async Task Full_dance_creates_user_sets_refresh_cookie_and_redirects_to_spa()
+    {
+        var (final, client) = await RunOAuthDanceAsync(
+            "/api/auth/external/fake?returnUrl=/boards",
+            u => u + "&email=" + Uri.EscapeDataString($"dance-{Guid.NewGuid():N}@example.com"));
+
+        final.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        final.Headers.Location!.ToString()
+            .Should().StartWith("http://localhost:4200/auth/callback?returnUrl=%2Fboards");
+        final.Headers.TryGetValues("Set-Cookie", out var cookies).Should().BeTrue();
+        cookies.Should().Contain(c => c.StartsWith("tm_refresh="));
+
+        // The SPA's next move — exchange the cookie for an access token.
+        var refresh = await client.PostAsync("/api/auth/refresh", null);
+        refresh.StatusCode.Should().Be(HttpStatusCode.OK);
+        var auth = await refresh.Content.ReadFromJsonAsync<JsonElement>();
+        auth.GetProperty("accessToken").GetString().Should().NotBeNullOrEmpty();
+        auth.GetProperty("user").GetProperty("email").GetString().Should().Contain("@example.com");
     }
 }
