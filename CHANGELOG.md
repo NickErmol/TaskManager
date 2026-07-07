@@ -4,6 +4,31 @@ All notable changes to Smart Task Manager are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-07-07
+
+"File Attachments" release, plus a full visual refresh of the SPA.
+
+### Added
+- **File attachments on tasks** (§13.5) — upload/download/delete (≤10 MB, common
+  types validated by extension, content type, and magic bytes), stored in MinIO
+  via the Tasks service. Uploads are proxied (browser → gateway → Tasks → MinIO,
+  MinIO stays private), capped at 20 per task, and downloads always ship
+  `Content-Disposition: attachment`. Attachments ride in `TaskDto`, so live board
+  sync works through the existing `TaskUpserted` broadcast; `AttachmentAdded` /
+  `AttachmentRemoved` contract events feed the per-board activity feed.
+- **Violet brand redesign** — custom Material 3 theme (violet primary, magenta
+  tertiary), Inter font, branded sticky nav, gradient auth screens, board cards
+  with accent bar and initials avatar, compact-density filter bar.
+
+### Fixed
+- Attachment upload over plain-HTTP MinIO no longer 500s (removed
+  `DisablePayloadSigning`, which AWSSDK.S3 rejects over http).
+- Task reads now include attachments (`GET` returned an empty list and download
+  404'd even though rows persisted).
+- Oversize uploads return 400 instead of 500 (`BadHttpRequestException` from the
+  multipart body-length limit is now surfaced with its own status code).
+- Board quick-create input no longer stays red after a successful submit.
+
 ## [1.1.0] - 2026-06-11
 
 "Live Collaboration" release. Four features extending v1.0, each landing a v1.1
@@ -63,5 +88,6 @@ delivered across the 8-step implementation playbook (spec §11).
   SignalR negotiate preflight succeeds.
 - Board-create form wrapped in a `FormGroup` so `(ngSubmit)` fires.
 
+[1.2.0]: https://github.com/NickErmol/TaskManager/releases/tag/v1.2.0
 [1.1.0]: https://github.com/NickErmol/TaskManager/releases/tag/v1.1.0
 [1.0.0]: https://github.com/NickErmol/TaskManager/releases/tag/v1.0.0

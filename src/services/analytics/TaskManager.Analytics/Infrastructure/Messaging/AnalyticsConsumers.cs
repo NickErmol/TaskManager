@@ -48,3 +48,15 @@ public class TaskDeletedEventConsumer(EventProjector projector) : IConsumer<Task
     public Task Consume(ConsumeContext<TaskDeletedEvent> context)
         => projector.ProjectAsync(context.Message, context.CancellationToken);
 }
+
+public class AttachmentAddedEventConsumer(EventProjector projector) : IConsumer<AttachmentAddedEvent>
+{
+    public Task Consume(ConsumeContext<AttachmentAddedEvent> context)
+        => projector.ProjectAsync(context.Message, context.CancellationToken);
+}
+
+public class AttachmentRemovedEventConsumer(EventProjector projector) : IConsumer<AttachmentRemovedEvent>
+{
+    public Task Consume(ConsumeContext<AttachmentRemovedEvent> context)
+        => projector.ProjectAsync(context.Message, context.CancellationToken);
+}

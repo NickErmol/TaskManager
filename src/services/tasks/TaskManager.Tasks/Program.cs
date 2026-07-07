@@ -87,6 +87,12 @@ builder.Services
     .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy())
     .AddNpgSql(_ => connectionForHealth, name: "postgres", tags: new[] { "ready" });
 
+// Multipart upload cap (spec §13.5) — reject oversized bodies before buffering the whole form.
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
+{
+    o.MultipartBodyLengthLimit = TaskManager.Tasks.Application.Attachments.AttachmentPolicy.MaxBytes;
+});
+
 var app = builder.Build();
 
 // Apply EF migrations on startup (spec §8)
@@ -105,6 +111,7 @@ app.UseAuthorization();
 app.MapHealthChecks("/health");
 app.MapBoardEndpoints();
 app.MapTaskEndpoints();
+app.MapAttachmentEndpoints();
 app.MapHub<BoardHub>("/hubs/board");
 
 app.Run();

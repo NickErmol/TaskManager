@@ -163,4 +163,34 @@ public class EventProjectorTests
         captured.ActorId.Should().Be(creator);
         captured.TaskTitle.Should().Be("Born");
     }
+
+    [Fact]
+    public async Task EventProjector_Project_AttachmentAddedEvent_RecordsActivity()
+    {
+        var uploader = Guid.NewGuid();
+
+        await _sut.ProjectAsync(new AttachmentAddedEvent(TaskId, BoardId, Guid.NewGuid(), uploader, "report.pdf", "My Task", Now));
+
+        var record = _addedEvents.Should().ContainSingle().Subject;
+        record.EventType.Should().Be("task.attachment-added");
+        record.TaskId.Should().Be(TaskId);
+        record.BoardId.Should().Be(BoardId);
+        record.UserId.Should().Be(uploader);
+        record.ActorId.Should().Be(uploader);
+        record.OccurredAt.Should().Be(Now);
+        await _uow.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task EventProjector_Project_AttachmentRemovedEvent_RecordsActivity()
+    {
+        var actor = Guid.NewGuid();
+
+        await _sut.ProjectAsync(new AttachmentRemovedEvent(TaskId, BoardId, Guid.NewGuid(), actor, "report.pdf", "My Task", Now));
+
+        var record = _addedEvents.Should().ContainSingle().Subject;
+        record.EventType.Should().Be("task.attachment-removed");
+        record.ActorId.Should().Be(actor);
+        record.UserId.Should().Be(actor);
+    }
 }

@@ -28,9 +28,14 @@ public class TaskItem
     private readonly List<TaskLabel> _labels = new();
     private readonly List<TaskComment> _comments = new();
     private readonly List<ChecklistItem> _checklist = new();
+    private readonly List<Attachment> _attachments = new();
     public IReadOnlyList<TaskLabel> Labels => _labels.AsReadOnly();
     public IReadOnlyList<TaskComment> Comments => _comments.AsReadOnly();
     public IReadOnlyList<ChecklistItem> Checklist => _checklist.AsReadOnly();
+    public IReadOnlyList<Attachment> Attachments => _attachments.AsReadOnly();
+    /// <summary>Per-task attachment cap. Enforced in the Application upload handler (Result.Fail on
+    /// excess) rather than here, so the limit surfaces as a 409 rather than a thrown domain exception.</summary>
+    public const int MaxAttachments = 20;
 
     private TaskItem() { }
 
@@ -123,4 +128,25 @@ public class TaskItem
     }
 
     public bool RemoveChecklistItem(Guid itemId) => _checklist.RemoveAll(i => i.Id == itemId) > 0;
+
+    /// <summary>
+    /// Appends an attachment. Intentionally does NOT touch <see cref="UpdatedAt"/> or
+    /// <see cref="RowVersion"/>: attachment writes are last-write-wins so concurrent uploads
+    /// by different members never 409 (mirrors ChecklistItem, spec §13.5).
+    /// </summary>
+    public Attachment AddAttachment(string fileName, string contentType, long sizeBytes, string storageKey, Guid uploadedById)
+    {
+        var att = Attachment.Create(Id, fileName, contentType, sizeBytes, storageKey, uploadedById);
+        _attachments.Add(att);
+        return att;
+    }
+
+    /// <summary>Removes an attachment by id, returning whether one was found. Like
+    /// <see cref="AddAttachment"/>, intentionally leaves <see cref="UpdatedAt"/>/<see cref="RowVersion"/>
+    /// untouched (last-write-wins child collection).</summary>
+    public bool RemoveAttachment(Guid attachmentId)
+    {
+        var att = _attachments.FirstOrDefault(a => a.Id == attachmentId);
+        return att is not null && _attachments.Remove(att);
+    }
 }

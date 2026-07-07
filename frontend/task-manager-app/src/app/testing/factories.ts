@@ -31,6 +31,7 @@ export const makeTask = (overrides: Partial<TaskDto> = {}): TaskDto => ({
   labelIds: [],
   comments: [],
   checklist: [],
+  attachments: [],
   ...overrides,
 });
 

@@ -1,21 +1,42 @@
 @if (auth.isAuthenticated()) {
-  <mat-toolbar color="primary" class="flex gap-4">
-    <a routerLink="/boards" class="font-medium text-inherit no-underline">Smart Task Manager</a>
-    <span class="flex-1"></span>
-    <a mat-button routerLink="/analytics">
-      <mat-icon>insights</mat-icon>
-      Analytics
+  <header class="tm-nav">
+    <a routerLink="/boards" class="flex items-center gap-2.5 text-inherit no-underline">
+      <span class="tm-logo">
+        <mat-icon>dashboard</mat-icon>
+      </span>
+      <span class="text-[15px] font-bold tracking-tight">Smart Task Manager</span>
     </a>
+
+    <span class="flex-1"></span>
+
+    <a routerLink="/analytics" class="tm-nav-link">
+      <mat-icon class="!h-5 !w-5 !text-[20px]">insights</mat-icon>
+      <span class="hidden sm:inline">Analytics</span>
+    </a>
+
     <tm-notification-bell
       [notifications]="notifications.notifications()"
       (opened)="openNotification($event)"
       (markAllRead)="notifications.markAllRead()"
     />
+
     @if (auth.user(); as user) {
-      <span class="text-sm">{{ user.displayName }}</span>
+      <span class="tm-user-chip">
+        <span class="tm-avatar-initials">{{ initials(user.displayName) }}</span>
+        <span class="hidden max-w-[12rem] truncate sm:inline">{{ user.displayName }}</span>
+      </span>
     }
-    <button mat-button type="button" (click)="logout()">Sign out</button>
-  </mat-toolbar>
+
+    <button
+      type="button"
+      (click)="logout()"
+      class="tm-nav-link"
+      aria-label="Sign out"
+    >
+      <mat-icon class="!h-5 !w-5 !text-[20px]">logout</mat-icon>
+      <span class="hidden sm:inline">Sign out</span>
+    </button>
+  </header>
 }
 
 <router-outlet />

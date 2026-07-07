@@ -25,4 +25,18 @@ public class TasksMapperTests
         dto.Checklist[1].IsDone.Should().BeTrue();
         dto.Checklist[1].Position.Should().Be(1);
     }
+
+    [Fact]
+    public void ToDto_includes_attachments()
+    {
+        var task = TaskItem.Create(Guid.NewGuid(), "T", Guid.NewGuid(), TaskPriority.Medium);
+        var att = task.AddAttachment("report.pdf", "application/pdf", 99, "k", Guid.NewGuid());
+
+        var dto = Mapper.ToDto(task);
+
+        dto.Attachments.Should().ContainSingle();
+        dto.Attachments[0].Id.Should().Be(att.Id);
+        dto.Attachments[0].FileName.Should().Be("report.pdf");
+        dto.Attachments[0].SizeBytes.Should().Be(99);
+    }
 }

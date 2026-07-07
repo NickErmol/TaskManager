@@ -122,4 +122,37 @@ describe('TasksApiService', () => {
     expect(req.request.method).toBe('DELETE');
     req.flush(task);
   });
+
+  it('uploadAttachment() issues a multipart POST /api/tasks/{id}/attachments', () => {
+    const task = makeTask();
+    const file = new File(['hi'], 'a.txt', { type: 'text/plain' });
+
+    service.uploadAttachment(task.id, file).subscribe();
+
+    const req = http.expectOne(apiUrl(`/api/tasks/${task.id}/attachments`));
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body instanceof FormData).toBe(true);
+    req.flush(task);
+  });
+
+  it('deleteAttachment() issues DELETE /api/tasks/{id}/attachments/{attId}', () => {
+    const task = makeTask();
+    service.deleteAttachment(task.id, 'att-1').subscribe();
+
+    const req = http.expectOne(apiUrl(`/api/tasks/${task.id}/attachments/att-1`));
+    expect(req.request.method).toBe('DELETE');
+    req.flush(task);
+  });
+
+  it('downloadAttachment() issues GET .../content as a blob', () => {
+    const task = makeTask();
+    let received: Blob | undefined;
+    service.downloadAttachment(task.id, 'att-1').subscribe((b) => (received = b));
+
+    const req = http.expectOne(apiUrl(`/api/tasks/${task.id}/attachments/att-1/content`));
+    expect(req.request.method).toBe('GET');
+    expect(req.request.responseType).toBe('blob');
+    req.flush(new Blob(['hi']));
+    expect(received).toBeInstanceOf(Blob);
+  });
 });

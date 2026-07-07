@@ -1,8 +1,6 @@
 import { ChangeDetectionStrategy, Component, effect, inject, untracked } from '@angular/core';
 import { Router, RouterLink, RouterOutlet } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MatToolbarModule } from '@angular/material/toolbar';
 import { AuthStore } from './core/auth';
 import { NotificationService, NotificationStore } from './core/notifications';
 import { NotificationBellComponent } from './shared/components';
@@ -15,9 +13,7 @@ import { NotificationDto } from './core/models';
   imports: [
     RouterOutlet,
     RouterLink,
-    MatButtonModule,
     MatIconModule,
-    MatToolbarModule,
     NotificationBellComponent,
   ],
   templateUrl: './app.component.html',
@@ -53,5 +49,14 @@ export class AppComponent {
 
   protected logout(): void {
     void this.auth.logout();
+  }
+
+  protected initials(name: string): string {
+    return name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]!.toUpperCase())
+      .join('');
   }
 }

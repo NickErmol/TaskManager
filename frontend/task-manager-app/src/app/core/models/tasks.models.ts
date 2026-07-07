@@ -33,6 +33,15 @@ export interface ChecklistItemDto {
   position: number;
 }
 
+export interface AttachmentDto {
+  id: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedById: string;
+  uploadedAt: string; // ISO; converted to local at display
+}
+
 export interface TaskDto {
   id: string;
   boardId: string;
@@ -50,6 +59,7 @@ export interface TaskDto {
   labelIds: string[];
   comments: CommentDto[];
   checklist: ChecklistItemDto[];
+  attachments: AttachmentDto[];
 }
 
 export interface BoardDto {
