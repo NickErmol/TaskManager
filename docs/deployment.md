@@ -71,6 +71,36 @@ Settings → Secrets and variables → Actions.
 | `FLY_DEPLOY_ENABLED` | runs the Fly backend deploy job |
 | `VERCEL_DEPLOY_ENABLED` | runs the Vercel frontend deploy job |
 
+### OAuth provider credentials (v1.3)
+
+These are **optional** — the app runs fine without them. The "Continue with
+Google" / "Continue with GitHub" buttons simply don't appear until credentials
+are set, so they are not needed for the gated-off default deploy.
+
+| Secret | Used by | Value source |
+|---|---|---|
+| `OAUTH_GOOGLE_CLIENT_ID` | Identity | Google OAuth app |
+| `OAUTH_GOOGLE_CLIENT_SECRET` | Identity | Google OAuth app |
+| `OAUTH_GITHUB_CLIENT_ID` | Identity | GitHub OAuth app |
+| `OAUTH_GITHUB_CLIENT_SECRET` | Identity | GitHub OAuth app |
+
+How to create the apps:
+
+- **Google:** Google Cloud Console → APIs & Services → Credentials → OAuth
+  client ID (Web application). Authorized redirect URI:
+  `https://<api-host>/api/auth/external/signin-google`.
+- **GitHub:** Settings → Developer settings → OAuth Apps → New. Authorization
+  callback URL: `https://<api-host>/api/auth/external/signin-github`. Scope
+  used: `user:email`.
+- `<api-host>` is the gateway's public origin (e.g. `api.yourdomain.com`),
+  matching your eTLD+1 choice in §1 above.
+
+Also set `FRONTEND_URL` (a repo/Fly environment variable, not a secret) to the
+SPA's public origin so callback redirects land on the real site.
+
+**Never set `OAUTH_FAKE_ENABLED` in staging/prod.** It's ignored outside the
+Development environment anyway (hard-coded guard), but don't set it.
+
 ---
 
 ## 4. Enabling deploys
