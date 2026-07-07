@@ -36,7 +36,7 @@ public class ExternalLoginCommandHandler(
             return Result.Ok(await TokenIssuance.IssueAsync(user, tokens, refreshRepo, uow, mapper, ct));
 
         if (string.IsNullOrWhiteSpace(cmd.Email) || !cmd.EmailVerified)
-            return Result.Fail<AuthHandlerResult>("unauthorized: email-unverified");
+            return Result.Fail<AuthHandlerResult>($"unauthorized: {ExternalAuthErrors.EmailUnverified}");
 
         user = await userManager.FindByEmailAsync(cmd.Email);
         if (user is null)

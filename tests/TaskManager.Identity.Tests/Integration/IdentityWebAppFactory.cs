@@ -9,8 +9,11 @@ using Testcontainers.PostgreSql;
 namespace TaskManager.Identity.Tests.Integration;
 
 /// <summary>
-/// Boots the Identity service against a real Postgres container. Each test class that uses
-/// this fixture gets a fresh database.
+/// Boots the Identity service against a real Postgres container. Shared by every class in
+/// the "identity-integration" collection — one container/database for the whole collection,
+/// whose classes run sequentially. (A per-class fixture would race: each instance writes the
+/// same process-global environment variables, so parallel classes would cross their container
+/// endpoints and null out JWT_SECRET under a still-running host.)
 /// </summary>
 public class IdentityWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {

@@ -47,7 +47,19 @@ public static class FakeOAuthEndpoints
             var bearer = req.Headers.Authorization.ToString();
             var token = bearer.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
                 ? bearer["Bearer ".Length..] : bearer;
-            var identity = JsonSerializer.Deserialize<FakeIdentity>(Convert.FromBase64String(token))!;
+
+            FakeIdentity? identity;
+            try
+            {
+                identity = JsonSerializer.Deserialize<FakeIdentity>(Convert.FromBase64String(token));
+            }
+            catch (Exception e) when (e is FormatException or JsonException)
+            {
+                // Garbage bearer is a client error, not a 500 — mirror a real provider.
+                identity = null;
+            }
+            if (identity is null) return Results.Unauthorized();
+
             return Results.Json(new
             {
                 sub = identity.Email, // stable key per fake identity

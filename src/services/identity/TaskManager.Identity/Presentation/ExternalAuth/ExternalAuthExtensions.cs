@@ -3,23 +3,9 @@ using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OAuth;
+using TaskManager.Identity.Application.Commands;
 
 namespace TaskManager.Identity.Presentation.ExternalAuth;
-
-public static class ExternalAuthDefaults
-{
-    /// <summary>Short-lived cookie holding the provider principal between callback legs.</summary>
-    public const string CookieScheme = "Identity.External";
-}
-
-/// <summary>Names of the external providers that actually registered (had credentials).</summary>
-public sealed class ExternalProviderCatalog
-{
-    private readonly List<string> _providers = [];
-    public IReadOnlyList<string> Providers => _providers;
-    public bool IsEnabled(string provider) => _providers.Contains(provider.ToLowerInvariant());
-    internal void Add(string provider) => _providers.Add(provider);
-}
 
 public static class ExternalAuthExtensions
 {
@@ -156,7 +142,7 @@ public static class ExternalAuthExtensions
         opt.Events.OnRemoteFailure = ctx =>
         {
             // User denied consent, state mismatch, provider outage — never a 500.
-            ctx.Response.Redirect($"{frontendUrl}/login?error=provider-error");
+            ctx.Response.Redirect($"{frontendUrl}/login?error={ExternalAuthErrors.ProviderError}");
             ctx.HandleResponse();
             return Task.CompletedTask;
         };

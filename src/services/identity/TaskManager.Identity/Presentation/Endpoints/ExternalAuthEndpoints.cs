@@ -25,7 +25,7 @@ public static class ExternalAuthEndpoints
             var props = new AuthenticationProperties
             {
                 RedirectUri = $"/api/auth/external/callback?returnUrl={Uri.EscapeDataString(target)}",
-                Items = { ["provider"] = scheme },
+                Items = { [ExternalAuthDefaults.ProviderItemKey] = scheme },
             };
             return Results.Challenge(props, [scheme]);
         });
@@ -37,10 +37,9 @@ public static class ExternalAuthEndpoints
 
             var auth = await ctx.AuthenticateAsync(ExternalAuthDefaults.CookieScheme);
             if (!auth.Succeeded || auth.Principal is null)
-                return Results.Redirect($"{frontend}/login?error=provider-error");
+                return Results.Redirect(LoginErrorRedirect(frontend, ExternalAuthErrors.ProviderError));
 
-            var provider = auth.Properties!.Items.TryGetValue("provider", out var p) && p is not null
-                ? p : "unknown";
+            auth.Properties!.Items.TryGetValue(ExternalAuthDefaults.ProviderItemKey, out var provider);
             var providerKey = auth.Principal.FindFirstValue(ClaimTypes.NameIdentifier);
             var email = auth.Principal.FindFirstValue(ClaimTypes.Email);
             var emailVerified =
@@ -50,16 +49,18 @@ public static class ExternalAuthEndpoints
             // One-shot cookie — drop it regardless of outcome.
             await ctx.SignOutAsync(ExternalAuthDefaults.CookieScheme);
 
-            if (string.IsNullOrWhiteSpace(providerKey))
-                return Results.Redirect($"{frontend}/login?error=provider-error");
+            // No provider item means the cookie wasn't minted by our challenge —
+            // treat exactly like a missing provider key rather than persisting junk.
+            if (string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(providerKey))
+                return Results.Redirect(LoginErrorRedirect(frontend, ExternalAuthErrors.ProviderError));
 
             var result = await mediator.Send(
                 new ExternalLoginCommand(provider, providerKey, email, emailVerified, displayName));
             if (result.IsFailed)
             {
-                var code = result.Errors.Any(e => e.Message.Contains("email-unverified"))
-                    ? "email-unverified" : "provider-error";
-                return Results.Redirect($"{frontend}/login?error={code}");
+                var code = result.Errors.Any(e => e.Message.Contains(ExternalAuthErrors.EmailUnverified))
+                    ? ExternalAuthErrors.EmailUnverified : ExternalAuthErrors.ProviderError;
+                return Results.Redirect(LoginErrorRedirect(frontend, code));
             }
 
             var handler = result.Value;
@@ -75,4 +76,7 @@ public static class ExternalAuthEndpoints
 
         return app;
     }
+
+    private static string LoginErrorRedirect(string frontend, string code)
+        => $"{frontend}/login?error={code}";
 }

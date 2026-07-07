@@ -5,7 +5,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace TaskManager.Identity.Tests.Integration;
 
-public class ExternalAuthTests(IdentityWebAppFactory factory) : IClassFixture<IdentityWebAppFactory>
+[Collection("identity-integration")]
+public class ExternalAuthTests(IdentityWebAppFactory factory)
 {
     [Fact]
     public async Task Providers_endpoint_lists_only_registered_providers()
@@ -15,8 +16,7 @@ public class ExternalAuthTests(IdentityWebAppFactory factory) : IClassFixture<Id
         var providers = await client.GetFromJsonAsync<string[]>("/api/auth/external/providers");
 
         // Development + FakeOAuth:Enabled=true (appsettings.Development.json)
-        // will register the fake provider in Task 4; google/github have no
-        // client ids in tests.
+        // registers the fake provider; google/github have no client ids in tests.
         providers.Should().NotBeNull();
         providers.Should().Contain("fake");
         providers.Should().NotContain("google");
@@ -90,7 +90,7 @@ public class ExternalAuthTests(IdentityWebAppFactory factory) : IClassFixture<Id
         for (var hop = 0; hop < 10; hop++)
         {
             var res = await client.GetAsync(url);
-            if (res.StatusCode is not (HttpStatusCode.Redirect or HttpStatusCode.Found))
+            if ((int)res.StatusCode is < 300 or >= 400)
                 return (res, client);
             var location = res.Headers.Location!.ToString();
             // Left our origin (e.g. the SPA at :4200) — the dance is over.
@@ -122,5 +122,17 @@ public class ExternalAuthTests(IdentityWebAppFactory factory) : IClassFixture<Id
         var auth = await refresh.Content.ReadFromJsonAsync<JsonElement>();
         auth.GetProperty("accessToken").GetString().Should().NotBeNullOrEmpty();
         auth.GetProperty("user").GetProperty("email").GetString().Should().Contain("@example.com");
+    }
+
+    [Fact]
+    public async Task Callback_without_external_cookie_redirects_with_provider_error()
+    {
+        var client = factory.CreateClient(new() { AllowAutoRedirect = false });
+
+        var res = await client.GetAsync("/api/auth/external/callback?returnUrl=/boards");
+
+        res.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        res.Headers.Location!.ToString()
+            .Should().Be("http://localhost:4200/login?error=provider-error");
     }
 }
