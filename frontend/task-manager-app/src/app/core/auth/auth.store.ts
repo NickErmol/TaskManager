@@ -81,6 +81,24 @@ export const AuthStore = signalStore(
         const user = await firstValueFrom(http.get<UserDto>(apiUrl('/api/users/me')));
         patchState(store, { user });
       },
+
+      /**
+       * Lands here from the backend's OAuth callback redirect: the refresh cookie is
+       * already set, so a refresh call is the token delivery (spec §13.6).
+       */
+      async completeExternalLogin(returnUrl: string): Promise<void> {
+        patchState(store, { isLoading: true, error: null });
+        try {
+          const res = await firstValueFrom(
+            http.post<AuthResponse>(apiUrl('/api/auth/refresh'), null, { withCredentials: true }),
+          );
+          patchState(store, { user: res.user, accessToken: res.accessToken, isLoading: false });
+          await router.navigateByUrl(returnUrl);
+        } catch {
+          patchState(store, { user: null, accessToken: null, isLoading: false });
+          await router.navigate(['/login'], { queryParams: { error: 'provider-error' } });
+        }
+      },
     };
   }),
 );

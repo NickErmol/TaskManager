@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -8,6 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AuthStore } from '../../core/auth';
+import { ExternalLoginButtonsComponent } from './external-login-buttons.component';
 
 @Component({
   selector: 'tm-login',
@@ -22,6 +23,7 @@ import { AuthStore } from '../../core/auth';
     MatIconModule,
     MatInputModule,
     MatProgressSpinnerModule,
+    ExternalLoginButtonsComponent,
   ],
   template: `
     <div class="tm-auth-bg">
@@ -56,6 +58,10 @@ import { AuthStore } from '../../core/auth';
             <p class="mb-2 text-sm text-red-600" role="alert">{{ error }}</p>
           }
 
+          @if (externalError) {
+            <p class="mb-2 text-sm text-red-600" role="alert">{{ externalError }}</p>
+          }
+
           <button mat-flat-button color="primary" type="submit" [disabled]="form.invalid || store.isLoading()">
             @if (store.isLoading()) {
               <mat-spinner diameter="20" class="mx-auto" />
@@ -64,6 +70,8 @@ import { AuthStore } from '../../core/auth';
             }
           </button>
         </form>
+
+          <tm-external-login-buttons />
 
           <p class="mt-5 text-center text-sm text-slate-600">
             No account yet?
@@ -77,11 +85,20 @@ import { AuthStore } from '../../core/auth';
 export class LoginComponent {
   protected readonly store = inject(AuthStore);
   private readonly fb = inject(NonNullableFormBuilder);
+  private readonly route = inject(ActivatedRoute);
 
   protected readonly form = this.fb.group({
     email: ['', [Validators.required, Validators.email]],
     password: ['', [Validators.required]],
   });
+
+  protected readonly externalError = ((): string | null => {
+    const code = this.route.snapshot.queryParamMap.get('error');
+    if (code === 'email-unverified')
+      return 'Your account with that provider has no verified email address, so we could not sign you in.';
+    if (code === 'provider-error') return 'Sign-in with the provider failed. Please try again.';
+    return null;
+  })();
 
   protected submit(): void {
     if (this.form.invalid) return;
