@@ -8,6 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AuthStore } from '../../core/auth';
+import { ExternalLoginButtonsComponent } from './external-login-buttons.component';
 
 // Spec §4.2 validation: password min 8 chars, ≥1 digit, ≥1 uppercase; display name 2–50.
 const PASSWORD_PATTERN = /^(?=.*\d)(?=.*[A-Z]).{8,}$/;
@@ -25,6 +26,7 @@ const PASSWORD_PATTERN = /^(?=.*\d)(?=.*[A-Z]).{8,}$/;
     MatIconModule,
     MatInputModule,
     MatProgressSpinnerModule,
+    ExternalLoginButtonsComponent,
   ],
   template: `
     <div class="tm-auth-bg">
@@ -78,6 +80,8 @@ const PASSWORD_PATTERN = /^(?=.*\d)(?=.*[A-Z]).{8,}$/;
             }
           </button>
         </form>
+
+          <tm-external-login-buttons />
 
           <p class="mt-5 text-center text-sm text-slate-600">
             Already registered?

@@ -8,6 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AuthStore } from '../../core/auth';
+import { ExternalLoginButtonsComponent } from './external-login-buttons.component';
 
 @Component({
   selector: 'tm-login',
@@ -22,6 +23,7 @@ import { AuthStore } from '../../core/auth';
     MatIconModule,
     MatInputModule,
     MatProgressSpinnerModule,
+    ExternalLoginButtonsComponent,
   ],
   template: `
     <div class="tm-auth-bg">
@@ -64,6 +66,8 @@ import { AuthStore } from '../../core/auth';
             }
           </button>
         </form>
+
+          <tm-external-login-buttons />
 
           <p class="mt-5 text-center text-sm text-slate-600">
             No account yet?
