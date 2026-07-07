@@ -34,6 +34,26 @@ public class ExternalAuthTests(IdentityWebAppFactory factory)
     }
 
     [Fact]
+    public async Task Challenge_builds_redirect_uri_from_forwarded_host()
+    {
+        // Behind the gateway (YARP) the service sees an internal Host header while
+        // the browser only knows the public origin. UseForwardedHeaders must make
+        // the OAuth redirect_uri track X-Forwarded-Host/Proto, otherwise the
+        // provider redirects the browser to an unreachable internal address
+        // (the real E2E failure this guards against — spec §13.6).
+        var client = factory.CreateClient(new() { AllowAutoRedirect = false });
+        var req = new HttpRequestMessage(HttpMethod.Get, "/api/auth/external/fake?returnUrl=/boards");
+        req.Headers.Add("X-Forwarded-Host", "gateway.example.com");
+        req.Headers.Add("X-Forwarded-Proto", "https");
+
+        var res = await client.SendAsync(req);
+
+        res.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        res.Headers.Location!.ToString().Should().Contain(
+            Uri.EscapeDataString("https://gateway.example.com/api/auth/external/signin-fake"));
+    }
+
+    [Fact]
     public async Task Fake_authorize_redirects_back_with_code_and_state()
     {
         var client = factory.CreateClient(new() { AllowAutoRedirect = false });

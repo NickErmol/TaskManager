@@ -3,6 +3,7 @@ using FluentResults;
 using FluentValidation;
 using Mediator;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -75,6 +76,21 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
     await db.Database.MigrateAsync();
 }
+
+// Behind the gateway (YARP) the browser only ever sees the public gateway origin,
+// but YARP forwards to this service on its internal container host. Honor the
+// X-Forwarded-Host/Proto headers YARP sends so OAuth redirect URIs (spec §13.6)
+// are built against the public origin, not the unreachable internal address.
+// Identity is only reachable via the gateway (spec §8 service network isolation),
+// so trusting these headers is the same trust model as the gateway's X-User-Id
+// header. A no-op under `dotnet run`/TestServer where no proxy sets the headers.
+var forwardedHeadersOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedHost | ForwardedHeaders.XForwardedProto,
+};
+forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseSerilogRequestLogging();
