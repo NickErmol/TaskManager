@@ -92,7 +92,37 @@ public static class ExternalAuthExtensions
             });
         }
 
+        if (FakeOAuthEnabled(config, env))
+        {
+            var publicUrl = (config["FakeOAuth:PublicUrl"] ?? "http://localhost:5000").TrimEnd('/');
+            var selfUrl = (config["FakeOAuth:SelfUrl"] ?? "http://localhost:5062").TrimEnd('/');
+            catalog.Add("fake");
+            auth.AddOAuth("fake", opt =>
+            {
+                ConfigureCommon(opt, "fake-client", "fake-secret", "fake", frontend);
+                // Browser-facing leg goes through the gateway; server-to-server legs
+                // target this service's own address.
+                opt.AuthorizationEndpoint = $"{publicUrl}/api/auth/fake-oauth/authorize";
+                opt.TokenEndpoint = $"{selfUrl}/api/auth/fake-oauth/token";
+                opt.UserInformationEndpoint = $"{selfUrl}/api/auth/fake-oauth/userinfo";
+                MapStandardClaims(opt);
+                opt.Events.OnCreatingTicket = ctx => FetchUserInfoAsync(ctx);
+            });
+        }
+
         return services;
+    }
+
+    /// <summary>
+    /// Development-only OAuth stub gate. Hard-stops outside Development regardless
+    /// of configuration — never active in staging/prod even if flags leak in.
+    /// </summary>
+    public static bool FakeOAuthEnabled(IConfiguration config, IWebHostEnvironment env)
+    {
+        if (!env.IsDevelopment()) return false; // hard stop — never in staging/prod
+        var flag = config["OAUTH_FAKE_ENABLED"];
+        if (string.IsNullOrWhiteSpace(flag)) flag = config["FakeOAuth:Enabled"];
+        return bool.TryParse(flag, out var enabled) && enabled;
     }
 
     private static string? Read(IConfiguration config, string key)

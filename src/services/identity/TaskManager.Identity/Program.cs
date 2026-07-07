@@ -84,6 +84,8 @@ app.UseAuthorization();
 app.MapHealthChecks("/health");
 app.MapAuthEndpoints(app.Environment);
 app.MapExternalAuthEndpoints(app.Environment);
+if (ExternalAuthExtensions.FakeOAuthEnabled(app.Configuration, app.Environment))
+    app.MapFakeOAuthEndpoints();
 app.MapUserEndpoints();
 
 app.Run();
