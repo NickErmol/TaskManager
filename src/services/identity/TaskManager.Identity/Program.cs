@@ -12,6 +12,7 @@ using TaskManager.Identity.Infrastructure;
 using TaskManager.Identity.Infrastructure.Persistence;
 using TaskManager.Identity.Infrastructure.Services;
 using TaskManager.Identity.Presentation.Endpoints;
+using TaskManager.Identity.Presentation.ExternalAuth;
 using TaskManager.Identity.Presentation.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -46,6 +47,9 @@ builder.Services
     });
 builder.Services.AddAuthorization();
 
+// External OAuth providers (spec §13.6) — registers only providers with credentials.
+builder.Services.AddExternalAuthProviders(builder.Configuration, builder.Environment);
+
 // Mediator + pipeline behaviors + Mapperly + validators
 builder.Services.AddMediator(opt => opt.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddScoped(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
@@ -79,6 +83,7 @@ app.UseAuthorization();
 
 app.MapHealthChecks("/health");
 app.MapAuthEndpoints(app.Environment);
+app.MapExternalAuthEndpoints(app.Environment);
 app.MapUserEndpoints();
 
 app.Run();
